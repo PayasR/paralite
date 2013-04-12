@@ -1,0 +1,368 @@
+\input texinfo  @c -*-texinfo-*-
+@setfilename paraliteman.info
+@settitle ParaLite User's Guide
+@iftex
+@setchapternewpage on
+@end iftex
+@comment %**end of header
+
+Copyright 2012 Ting Chen
+
+@titlepage
+@title ParaLite User's Guide
+@subtitle May 2012
+@author Ting Chen
+@author
+@author University of Tokyo
+@author 7-3-1 Hongo Bunkyo-ku Tokyo, 113-0033 Japan
+@page
+@vskip 0pt plus 1filll
+@end titlepage
+
+@contents
+
+@node Top, Getting Started, (dir), (dir)
+
+@ifhtml
+@c HTML <link rel="STYLESHEET" href="gxpman.css" type="text/css" />
+@c HTML <h1>GXP3 User Manual</h1>
+@end ifhtml
+
+@menu
+* Getting Started::             
+* Tutorial::                    
+* Using ParaLite in Real-World Workflows::  
+
+@detailmenu
+ --- The Detailed Node Listing ---
+
+Getting Started
+
+* Prerequisites::
+* Installation::                
+
+Tutorial
+
+* Data exchanging methods::
+* Performing general SQL query::   
+* Performing collective query::  
+* Special Command::
+* Quick Reference of Frequently Used Commands::  
+
+@end detailmenu
+@end menu
+
+@node Getting Started, Tutorial, Top, Top
+@chapter Getting Started
+
+
+@menu
+* Prerequisites::               
+* Installation::                
+@end menu
+
+@node Prerequisites, Installation, Getting Started, Getting Started
+@section Prerequisites
+
+To play with ParaLite, you need:
+@itemize
+@item Python interpreter
+@item GXP (Grid and Cluster Shell)
+@item SQLite
+@end itemize
+
+ParaLite is developed on Linux in python and only tested on Linux. ParaLite supports python 2.7 and probably newer versions, but python 2.5 is 
+not supported.
+
+It based on SQLite, a popular single-node database system. 
+@example
+    http://www.sqlite.org
+@end example
+You have to install SQLite on each data node.
+
+GXP is used to explore nodes. It is a parallel shell tool to let you 
+run an identical or a similar command line to many machines in parallel 
+and get results back interactively. You can obtain it from sourceforge:
+@example
+    http://sourceforge.net/projects/gxp/
+@end example
+
+@node Installation,  , Prerequisites, Getting Started
+@section Installation
+
+unpack the tarball:
+@example
+    $ tar zxvf paralite-xx.tar.bz2
+@end example
+add @t{paralite} to the execution path:
+@example
+    $ ln -s /path/to/paralite-xx/paralite /usr/local/bin/paralite
+@end example
+
+or,
+@example
+    $ export PATH=$PATH:/absolute/path/to/paralite-xx
+@end example
+
+To test your installation, type @t{paralite} to your shell prompt and see
+something like this.
+@example
+$ paralite
+  Usage: paralite /path/to/db STATEMENT [--hub]
+  Please enter "paralite help" for more information.
+@end example
+Before a query is issued, you should assure that all related nodes have already
+been explored by GXP.
+@node Tutorial, 
+@chapter Tutorial
+
+@menu
+* Data exchanging methods::
+* Performing general SQL query::   
+* Performing collective query::  
+* Special Command::
+* Quick Reference of Frequently Used Commands::  
+@end menu
+
+@section Processes coordination methods
+
+ParaLite is server-less and zero-configuration system, that is, you don't need
+start any process and specify any configuration before SQL is executed. To achieve this,
+a super process should be started to coordinate all other processes after they are started. 
+Then where to start the super process and how everybody knows it? You need to specify
+hub information at the end of each query using three methods:
+
+(1) @t{--hub db:hub_db} : Using a database as a hub;
+
+@example
+$ paralite /path/to/db "query" --hub db:hub_db
+@end example
+If no hub info is specified, paraLite uses @t{/path/to/db} right after @t{paralite}
+as default hub. 
+
+(2) @t{--hub file://path/to/file} : Using a separate file 
+which can be opened by all processes;
+
+(3) @t{--hub host://hostname:port} : Starting the master process that listens 
+to the @t{port} on machine @t{hostname}. This is commonly used because you
+can specify the super process running on a machine that explored all related nodes.
+
+Note that, (1) or (2) is used only if the database and file can be shared among all 
+processes, e.g. NFS is used. 
+
+@section Performing general SQL query
+
+First, you can create table by the following command:
+@example
+$ paralite test.db "create table x(a int, b varchar(10))"
+@end example
+This query is to create table @t{x} locally. If you want to specify the 
+data nodes on which the table is created,
+@t{on} option is required as the following query:
+@example
+$ paralite test.db "create table x(a, b) on huscs000"
+@end example
+Several nodes can be specified in a single query delimited by space.
+
+If you have many nodes, typing each node name is very troublesome and painful.
+An improved description for multiple nodes is 
+@t{[[xxx-yyy]]}, which represents a set of numbers between @t{xxx} and @t{yyy} 
+(inclusive). 
+@example
+paralite test.db "create table x(a, b) on huscs[[000-002]]"
+@end example
+You can also use a configuration file to specify data nodes:
+@example
+$ paraLite test.db create table x(a, b) on file node.conf
+$ cat node.conf
+huscs[[000-003]]
+hongo[[100-112]]
+@end example
+
+This table can be partitioned either by hash fashion based on a specific 
+key or round-robin fashion (by default). 
+You can also specify the number of replica for 
+each partition, 1 by default.
+@example
+$ paralite test.db "create table x(a, b) [partition by key] [replica 3]"
+@end example
+
+Then, you need to load data to database:
+@example
+$ cat test.dat
+aa|test1
+bb|test2
+aa|test3
+$ paralite test.db ".import test.dat x"
+@end example
+The default row separator and col separator in ParaLite are @t{\n} and @t{|}
+respectively. If your source data is not separated by them, assuming that row 
+separator is '===' and col separator is '###', you can either 
+change them by 
+@example
+$ paralite test.db ".row_separator ==="
+$ paralite test.db ".col_separator ###"
+@end example
+or specify them in the @t{.import} command 
+@example
+$ paralite test.db ".import test.dat x -column_separator ### -row_separator ==="
+@end example
+Note that, at this point, paraLite cannot support session, that is, the values of all
+settings are changed explicitly.
+
+Next, you can perform some selection on the table:
+@example
+$ paralite test.db "select * from x where a='aa'"
+aa|test1
+aa|test3
+$ paralite test.db "select count(*) from x"
+3
+$ paralite test.db "select a, count(*) from x group by a"
+aa|2
+bb|1
+@end example
+Currently, ParaLite has some limitation in general SQL as follows:
+@itemize
+@item (1) At most one selected column is Aggreation Function or UDX. 
+E.g. it cannot support SQL like ``select sum(*), count(*) from ..''
+@item (2) ParaLite cannot output an column which is an argument of a UDX. E.g. 
+select id, F(id) from t with F ...    
+@item (3) ParaLite cannot support compound operator: union, intersect, except
+@end itemize
+These limitations will be fixed in the next version.
+
+@section Performing collective query 
+collective query extends SQL syntax in which a user can define User-Defined
+Executable (UDX). The syntax of collective query with UDX is:
+@example
+select a, F(b) as bb, c, ... from t where ....
+with F="cmd_line"
+     input stdin input_row_delimiter NEW_LINE input_col_delimiter NULL
+     output stdout output_row_delimiter NEW_LINE output_col_delimiter NULL 
+     output_record_delimiter EMPTY_LINE
+collective by 1
+@end example
+
+Collective query has two features:
+
+(1) Supportive of User-Defined Executable (UDX): an UDX is an executable binary or
+scrip which is defined in the query as a command line. Following the command line,
+you may want to specify the format of input and output data.
+@itemize
+@item @t{input} : stdin by default or '/path/to/file' 
+@item @t{input_row_delimiter} : NEW_LINE by default or 'any_string' 
+@item @t{input_col_delimiter} : NULL by default or 'any_string' 
+@item @t{output} : stdout by default or '/path/to/file' 
+@item @t{output_row_delimiter} : NEW_LINE by default or 'any_string' 
+@item @t{output_col_delimiter} : NULL by default or 'any_string' 
+@item @t{output_record_delimiter} : EMPTY_LINE by default or 'any_string' 
+@end itemize
+You can understand all these options by the following example:
+@example
+$ paralite test.db "select * from document"
+@t{document_id | text}
+32819 | It is sunny today. I have a good mood.
+82718 | I am studying in the lab. I want to go outside and play pingpong.
+@end example
+A executable @t{sentence_splitter} (@t{ss} for short) is used to split a 
+text into sentences and add an identification to each sentence. 
+@example
+$ cat a.dat
+Sentence1. Sentence2. Sentence3.
+$ cat a.dat | ss 
+1==Sentence1.
+2==Sentence2.
+3==Sentence3.
+$ paralite test.db "select document_id, F(text) from document with F=\"ss\" output_row_delimiter EMPTY_LINE"
+32819 | 1 == It is sunny today.
+        2 == I have a good mood.
+82718 | 1 == I am studying in the lab.
+        2 == I want to go outside and play pingpong.
+$ paralite test.db "select document_id, F(text) from document with F=\"ss\" output_col_delimiter '==' output_record_delimiter EMPTY_LINE"
+32819 | 1 | It is sunny today.
+32819 | 2 | I have a good mood.
+82718 | 1 | I am studying in the lab.
+82718 | 2 | I want to go outside and play pingpong.
+@end example
+
+An UDX can have more than one argument and output more than one column, e.g. F(a) as 
+aa, G(a, b) as bb, G(a, b, c) as(bb, cc).
+
+(2) Identification of Collective Query: 
+Each query has an identification specified by @t{collective by ID}. Computing clients
+are grouped based on the ID. If a calculation is performed by 5 clients in 
+parallel, 5 clients on any machines should issue a same query with same ID. 
+Some clients can join the group during the calculation but before all data in data
+nodes are distributed. 
+
+@section Special command
+@example
+$ paralite test.db "special command"
+@end example
+
+special command:
+@example
+@t{.import FILE|DIR table [record_tag] [-column_separator col_sep] 
+                 [-row_separator row_sep]} Import data from FILE into TABLE 
+@t{.output FILE}        Send output to FILENAME
+@t{.output stdout}	     Send output to the screen
+@t{.indices [TABLE]}     Show names of all indices. 
+                     If TABLE specified, only show indices for tables
+@t{.row_separator STRING}   Change row separator used by output mode and .import
+@t{.col_separator STRING}   Change col separator used by output mode and .import
+@t{.show}	             Show the current values for various settings
+@t{.analyze SQL}       Show the logical plan of a SQL query;  
+@end example
+
+@section Configurations for performance
+ParaLite allows you to make your own configuration file to control some parameters
+of SQLite or query execution plan. If you want to create the file, firstly create
+a file called @t{paralite.conf} in the current directory. 
+Of course, you have to assure that the super process I mentioned above can access it.
+@example
+$ cat paralite.conf
+[db]
+cache_size=-1        ; unit = KB,  -1: use the default size of sqlite
+temp_store=0         ; where to store the temporary tables and indices: 
+                       0--default, 1--file, 2--memory
+[runtime]
+worker_num=-1, -1, -1  ; they are the number of worker for operators. 
+                         -1: use all data nodes
+@end example
+The value of worker_num depends on the shape of execution plan for a query.
+Before you set it, you probably need to use the analyze command to get the execution
+plan:
+@example
+$ paralite test.db ".analyze 'select F(a) from x, y where x.a = y.b' with F=\"cmd\""
+- udx: cmd
+  -- join: x.a = y.b
+     --- sql1: select x.a from x
+     --- sql2: select y.b from y
+@end example
+So the @t{worker_num} could be -1, -1, 3, -1. You can only give non -1 value to 
+operators who are not @i{sql} and @i{udx} since @i{sql} should be executed by 
+every data node and @i{udx} is performed by each computing client.
+
+@section Logs, temporary data and databases 
+Once a query is issued, you have two directories named @t{.paralite-log} where stores all
+logging information and @t{.paralite-tmp} where stores all intermediate data in home
+directory by default. You can also specify your own directories for them by specifing 
+the options @t{-log} and @t{-temp} respectively.
+
+When you firstly use a database, for instance, when you issue the next SQL:
+@example
+$ paralite test.db "create table x (a int, b) on hongo[[100-102]]"
+@end example
+A @t{test.db} is firstly created to store all metadata info and 3 other files named
+@t{test.db-hostname-time-id} are created on hongo100, hongo101 and hongo102 respectively in the same directory with @t{test.db}.
+
+
+@chapter Using ParaLite in Real-World Workflows
+@menu
+* 
+@end menu
+TODO
+
+@bye
+                                   
+

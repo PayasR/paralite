@@ -1,0 +1,11 @@
+#!/usr/bin/env python 
+
+try:
+        import sys, time
+        import paraLite
+
+        if __name__ == "__main__":
+                sys.exit(paraLite.paraLite().main(sys.argv))
+
+except KeyboardInterrupt,e:              
+       pass

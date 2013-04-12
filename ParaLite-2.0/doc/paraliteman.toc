@@ -1,0 +1,11 @@
+\chapentry{Getting Started}{1}{1}
+\secentry{Prerequisites}{1}{1}{1}
+\secentry{Installation}{1}{2}{1}
+\chapentry{Tutorial}{2}{2}
+\secentry{Processes coordination methods}{2}{1}{2}
+\secentry{Performing general SQL query}{2}{2}{2}
+\secentry{Performing collective query}{2}{3}{3}
+\secentry{Special command}{2}{4}{4}
+\secentry{Configurations for performance}{2}{5}{5}
+\secentry{Logs, temporary data and databases}{2}{6}{5}
+\chapentry{Using ParaLite in Real-World Workflows}{3}{7}
