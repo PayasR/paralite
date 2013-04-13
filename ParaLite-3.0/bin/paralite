@@ -1,0 +1,45 @@
+#!/usr/bin/env python 
+
+try:
+        import sys, time
+        from paraLite import ParaLite
+
+        if __name__ == "__main__":
+		if len(sys.argv) == 2 and sys.argv[1] != "help":
+			# paralite db < a.sql
+			sql = ""
+			for i in sys.stdin:
+				line = i.strip()
+				if line.startswith("--"):
+					continue				
+				sql += line + " "
+			sql = sql.strip()
+			if sql.endswith(";"):
+				sql = sql[0:len(sql)-1]
+			sys.argv.append(sql)
+
+		argv = sys.argv
+		if len(argv) == 1 or len(argv) == 2:
+			ParaLite().main(argv, 0)
+			sys.exit(0)
+			
+		if argv[2].find(";") != -1:
+			# multiple queries in a file
+			for query in argv[2].split(";"):
+				print query.strip()
+				# there are other arguments
+				if query.find("\"") != -1:
+					sql = query[query.find("\""): query.rfind("\"") + 1].strip()
+					other_argv = query[query.rfind("\"") + 1 : ].split()
+				else:
+					sql = query.strip()
+					other_argv = []
+				ParaLite().main([argv[0], argv[1]] + [sql] + other_argv, 0)
+
+		else:
+			ParaLite().main(argv, 0)
+		sys.exit(0)
+
+
+except KeyboardInterrupt,e:              
+       pass
