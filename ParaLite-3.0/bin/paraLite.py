@@ -198,6 +198,7 @@ class ParaLite:
         dic[conf.BLOCK_SIZE] = 0
         return dic
 
+
     def read_config_file(self, cf):
         f = open(cf, "rb")
         while True:
