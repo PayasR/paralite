@@ -2873,6 +2873,15 @@ class TaskManager:
                                           cqid, op.id, port, log_dir)
             if op.name == Operator.UDX:
                 args = "%s %s" % (args, len(self.operator_jobqueue)-1)
+
+            # check if gxpc is in the path
+            program = "gxpc"
+            for path in os.environ["PATH"].split(os.pathsep):
+                path = path.strip('"')
+                exe_file = os.path.join(path, program)
+                if not (os.path.isfile(exe_file) and os.access(exe_file, os.X_OK)):
+                    raise(Exception("ERROR: Please set gxpc in the path"))
+
             cmd = "gxpc e -h %s python %s %s" % (node, name, args)
             ParaLiteLog.debug(cmd)
             

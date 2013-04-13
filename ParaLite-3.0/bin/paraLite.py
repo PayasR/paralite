@@ -192,7 +192,8 @@ class ParaLite:
 
     def init_default_configs(self):
         dic = {}
-        dic[conf.TEMP_DIR] = "/data/local/.paralite-tmp" 
+        #dic[conf.TEMP_DIR] = "/data/local/.paralite-tmp" 
+        dic[conf.TEMP_DIR] = "/tmp"
         dic[conf.LOG_DIR] = "/home/%s/.paralite-log" % (pwd.getpwuid(os.getuid())[0])
         dic[conf.BLOCK_SIZE] = 0
         return dic
