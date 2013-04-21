@@ -348,7 +348,11 @@ class SqlOp:
                     if len(rs) == 1:
                         if self.dest == conf.DATA_TO_ANO_OP:
                             # dest is AGGR op or ORDER op, use 0 as the key
-                            self.result[0] = rs
+                             if 0 not in self.result:
+                                 self.result[0] = rs
+                             else:
+                                 self.result[0].append(rs[0])
+
                             if self.is_checkpoint == 1:
                                 self.write_data_to_disk(0, rs[0].getvalue())
                         else:
