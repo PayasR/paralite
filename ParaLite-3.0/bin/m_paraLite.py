@@ -379,6 +379,7 @@ class LogicalPlanMaker:
         node = BasicOp()
         node.name = Operator.SQL
         node.expression = self.sql
+        node.tables = table
         node.id = str(0)
         tree = node
         self.task.plan = tree
@@ -2682,7 +2683,7 @@ class TaskManager:
         for job in jobqueue:
             # check if there is job locally
             if job.status == Job.READY and datanode == job.node:
-                if job.sql.startswith("create") or job.sql.startswith("drop"):
+                if job.sql.lower().startswith("create") or job.sql.lower().startswith("drop"):
                     # This is a CREATE job
                     target_job = job
                 else:
