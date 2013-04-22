@@ -406,7 +406,7 @@ class ParaLite:
 
         self.ctquery = ctquery
         s = ["select", "create", "insert", "drop", "delete", "update"]
-        if ctquery.split()[0] in s:
+        if ctquery.split()[0].lower() in s:
            self.args = ["sql", database, ctquery]
         elif ctquery.startswith("."):
             self.args = ["special", database, ctquery]
