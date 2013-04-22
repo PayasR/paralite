@@ -6190,6 +6190,9 @@ class ParaLiteMaster():
         task = self.task_manager.taskqueue[cqid]
         jobqueue = self.task_manager.operator_jobqueue[opid]
 
+        if jobid_list == []:
+            return 0
+
         # FAULT TOLERANCE:
         cur_op = self.get_op_by_id(task.plan, opid)
         if task.failed_node != []:
@@ -6293,6 +6296,9 @@ class ParaLiteMaster():
         else:
             # check if all children have already get data
             for child in op.children:
+                # eliminate the situation that the child is a sql op to create table 
+                if child.name == Operator.SQL and child.expression.lower().startswith("create"):
+                    continue
                 if child.status != conf.PENDING:
                     return
 
@@ -6851,7 +6857,12 @@ def send_bytes(so, msg):
     totalsent = 0
     msglen = len(msg)
     while totalsent < msglen:
-        sent = so.send(msg[totalsent:])
+        try:
+            sent = so.send(msg[totalsent:])
+        except Exception, e:                                      
+            if e.errno == 11:                                     
+                # [Errno 11] Resource temporarily unavailable     
+                continue                                          
         totalsent += sent
                                         
 def run_cmd(cmd):
