@@ -5,7 +5,16 @@ try:
         from paraLite import ParaLite
 
         if __name__ == "__main__":
-		if len(sys.argv) == 2 and sys.argv[1] != "help":
+		argv = sys.argv
+		if len(argv) == 1:
+			ParaLite().main(argv, 0)
+			sys.exit(0)
+
+		elif len(argv) == 2:
+			if argv[1].lower() == "help":
+				ParaLite().main(argv, 0)
+				sys.exit(0)
+				
 			# paralite db < a.sql
 			sql = ""
 			for i in sys.stdin:
@@ -16,13 +25,8 @@ try:
 			sql = sql.strip()
 			if sql.endswith(";"):
 				sql = sql[0:len(sql)-1]
-			sys.argv.append(sql)
+			argv.append(sql)
 
-		argv = sys.argv
-		if len(argv) == 1 or len(argv) == 2:
-			ParaLite().main(argv, 0)
-			sys.exit(0)
-			
 		if argv[2].find(";") != -1:
 			# multiple queries in a file
 			for query in argv[2].split(";"):

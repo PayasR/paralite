@@ -356,7 +356,7 @@ class ParaLite:
         ParaLiteLog.info("%s: FINISH" % (self.start_load.__name__))
         
     def parse(self, argv):
-        if len(argv) == 2 and argv[1] == "help":
+        if len(argv) == 2 and argv[1].lower() == "help":
             self.args = ["help"]
             return
         
