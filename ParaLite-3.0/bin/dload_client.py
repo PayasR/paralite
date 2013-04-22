@@ -607,8 +607,8 @@ class dload_client:
                                 thds.append(thd)
                         i += 1
                         del ds
-                for thd in thds:
-                    thd.join()
+            for thd in thds:
+                thd.join()
             ss2 = time.time()
             """
             sss = socket(AF_INET, SOCK_STREAM)
