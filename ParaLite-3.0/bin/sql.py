@@ -353,8 +353,8 @@ class SqlOp:
                              else:
                                  self.result[0].append(rs[0])
 
-                            if self.is_checkpoint == 1:
-                                self.write_data_to_disk(0, rs[0].getvalue())
+                             if self.is_checkpoint == 1:
+                                 self.write_data_to_disk(0, rs[0].getvalue())
                         else:
                             # dest is UDX op, use jobid as the key
                             self.result[string.atoi(jobid)] = rs

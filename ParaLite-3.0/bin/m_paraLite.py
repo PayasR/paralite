@@ -2877,11 +2877,15 @@ class TaskManager:
 
             # check if gxpc is in the path
             program = "gxpc"
+            flag = 0
             for path in os.environ["PATH"].split(os.pathsep):
                 path = path.strip('"')
                 exe_file = os.path.join(path, program)
-                if not (os.path.isfile(exe_file) and os.access(exe_file, os.X_OK)):
-                    raise(Exception("ERROR: Please set gxpc in the path"))
+                if os.path.isfile(exe_file) and os.access(exe_file, os.X_OK):
+                    flag = 1
+                    break
+            if flag == 0:
+                raise(Exception("ERROR: Please set gxpc in the path"))
 
             cmd = "gxpc e -h %s python %s %s" % (node, name, args)
             ParaLiteLog.debug(cmd)
