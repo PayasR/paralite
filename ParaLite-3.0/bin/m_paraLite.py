@@ -2876,11 +2876,12 @@ class TaskManager:
                 args = "%s %s" % (args, len(self.operator_jobqueue)-1)
 
             # check if gxpc is in the path
+            
             program = "gxpc"
             flag = 0
-            for path in os.environ["PATH"].split(os.pathsep):
-                path = path.strip('"')
-                exe_file = os.path.join(path, program)
+            for path1 in os.environ["PATH"].split(os.pathsep):
+                path1 = path1.strip('"')
+                exe_file = os.path.join(path1, program)
                 if os.path.isfile(exe_file) and os.access(exe_file, os.X_OK):
                     flag = 1
                     break

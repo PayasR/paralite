@@ -7,7 +7,6 @@ import base64
 import string
 import random
 import re
-import io
 import shlex
 import cStringIO
 import traceback
