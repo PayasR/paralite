@@ -213,6 +213,7 @@ class ParaLite:
             if gethostname() == node:
                 # the client is on the same node with the master, then we directly query the metadata db
                 con = sqlite3.connect(database)
+                con.text_factory = str
                 cr = con.cursor()
                 if cmd_type == "TABLE_COLUMN":
                     rs = cr.execute('select attribute from table_attr_info where name = "%s"' % (table)).fetchall()
