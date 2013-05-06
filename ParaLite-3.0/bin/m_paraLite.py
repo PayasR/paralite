@@ -2867,13 +2867,14 @@ class TaskManager:
                 
             # python %.py master_node master_port cqid opid port log_dir [worker_id]
             name = '%s%s.py' % (path, op.name)
-            cqid = self.taskqueue[self.taskqueue.keys()[0]].id
+            t = self.taskqueue[self.taskqueue.keys()[0]]
+            cqid = t.id
             log_dir = self.userconfig.log_dir
             
             args = "%s %s %s %s %s %s" % (master_node, master_port,
                                           cqid, op.id, port, log_dir)
             if op.name == Operator.UDX:
-                args = "%s %s" % (args, len(self.operator_jobqueue)-1)
+                args = "%s %s" % (args, len(t.clients)-1)
 
             # check if gxpc is in the path
             
@@ -5703,10 +5704,8 @@ class ParaLiteMaster():
 
     def handle_exception(self, ex):
         ParaLiteLog.debug("start to handle exception...")
-        # clear all processes
-        os.system("clear.sh")
-        ParaLiteLog.debug("executing clear.sh")
-        
+        self.safe_kill_master()
+
         # send the error info to the client
         self.report_error_to_clients(ex[1])
 
@@ -5840,6 +5839,10 @@ class ParaLiteMaster():
         ParaLiteLog.info("sending EXIT to %s" % str((master_node,master_port)))
         sock.close()
         
+        #kill all related process
+        os.system("clear.sh")
+        ParaLiteLog.debug("executing clear.sh")
+
     def add_new_client(self, t, so, c):
         t.reply_sock.append(so)
         t.clients.append(c)
@@ -5868,7 +5871,7 @@ class ParaLiteMaster():
         op.node[op.worker_num] = c
         opid = "%s_%s" % (op.id, op.worker_num)
         op.worker_num += 1
-        self.task_manager.start_operator(op, c)
+        self.task_manager.start_operator(op, [c])
         
     def reg_new_client(self, message):
         #REG:CLIENT:database:collective_query:nodename:port
@@ -5880,7 +5883,7 @@ class ParaLiteMaster():
         if t:
             if self.output is None:
                 self.output = InfoCenter().get_output(metadata_db)
-                (row_sep, col_sep) = InfoCenter().get_separator(metadata_db)
+            (row_sep, col_sep) = InfoCenter().get_separator(metadata_db)
             msg = "%s%s%s%s%s%s%s" % (conf.DB_INFO, conf.SEP_IN_MSG, self.output,conf.SEP_IN_MSG, row_sep, conf.SEP_IN_MSG, col_sep)
             try:
                 sock = socket(AF_INET, SOCK_STREAM)
@@ -5968,7 +5971,11 @@ class ParaLiteMaster():
                                                 port, localaddr)
             # we cannot know the number of clients in advance, so we will start
             # its all children jobs once we received a registration
-            num = 1
+            if op.status is None:          
+                num = 1                    
+            elif op.status == conf.READY:  
+                num = sys.maxint           
+
         elif op.name in [Operator.ORDER_BY, Operator.AGGREGATE, Operator.DISTINCT]:
             num = 1
         else:
@@ -6680,6 +6687,7 @@ class ParaLiteMaster():
         dn.cur_job = job_size.keys()[0]
         for key in task.worker_nodes:
             worker = task.worker_nodes[key]
+            par_opid = worker.opid
             if worker.name == dn.name:
                 dn.clients.append(worker)
         if len(dn.clients) != 0:
@@ -6707,8 +6715,9 @@ class ParaLiteMaster():
             self.send_msg_to_worker(conf.END_TAG, [(dn.name, dn.port)], "")
             ParaLiteLog.debug("send ENG_TAG --> %s:%s" % (dn.name, dn.port))
         if result != {}:
+            jobqueue = self.task_manager.operator_jobqueue[par_opid]
             for workerid in result:
-                self.task_manager.operator_jobqueue[opid][string.atoi(workerid)].child_jobs.append(result[workerid])
+                jobqueue[string.atoi(workerid)].child_jobs.append(result[workerid])
 
     def process_ack_datanode(self, message):
         # ACK:JOB:cqid:hostname
@@ -7076,10 +7085,8 @@ def main():
         m_paraLite_ins.safe_kill_master()
     except Exception, e:
         traceback.print_exc()
+        m_paraLite_ins.safe_kill_master()
 
-    #kill all related process
-    os.system("clear.sh")
-    ParaLiteLog.debug("executing clear.sh")
     
 if __name__=="__main__":
     #test()
