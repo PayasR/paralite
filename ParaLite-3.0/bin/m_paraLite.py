@@ -225,7 +225,8 @@ class JoinOp(BasicOp):
         # the input and output for different predictions
         self.pred_input = []
         self.pred_output = [] 
-        self.join_type = None 
+        self.join_type = None # LEFT_JOIN, RIGHT_JOIN ... 
+        self.operator = None  # =, < , > ...
 
     def copy(self, tree1):
         BasicOp.copy(self, tree1)        
@@ -774,13 +775,15 @@ class LogicalPlanMaker:
                             child2.expression = cur_table
                             child2.tables = [cur_table]
                             node_join.children = [child1, child2]
-
                         else:
                             node_join = self.get_WHERE_CLAUSE_node(ele[3])
+
+                        if node_join.operator != "=" and node_join.operator != "==":
+                            return None, 1, ParaLiteException().NON_EQUI_JOIN_ERROR
                         if ele[0].lower() == "join":
                             node_join.join_type = conf.JOIN
-                        elif ele[0].lower() == "left join":
-                            node_join.join_type = conf.LEFT_JOIN
+                        else:
+                            return None, 1, ParaLiteException().NON_EQUI_JOIN_ERROR
                             
                         """
                         adding a AND node to connect the explicit join 
@@ -788,6 +791,7 @@ class LogicalPlanMaker:
                         """
                         first_node.children.append(node_join)
                         first_node.tables += node_join.tables
+                        self.task.table = srclist[0][0]
                     else:
                         if len(ele) > 1:
                             self.task.table_alias[ele[-1]] = ele[0]
@@ -966,14 +970,25 @@ class LogicalPlanMaker:
                 else:
                     continue
             column = "".join(col)
-            if column == "*" or column == "%s.*" % (self.task.table):
-                all_cols = InfoCenter().get_table_columns(metadata_db,
-                                                       self.task.table)
+            # if column == "*" or column == "%s.*" % (self.task.table):
+            #     all_cols = InfoCenter().get_table_columns(metadata_db,
+            #                                            self.task.table)
+            #     for cc in all_cols:
+            #         proj_node.output.append(str(cc))
+            #         proj_node.keys.append(str(cc))
+            if column.find("*") != -1:
+                if len(column.split(".")) == 2:
+                    curtbl = column.split(".")[0]
+                else:
+                    curtbl = self.task.table
+                if curtbl is None:
+                    return None, 1, "Please specify the table for the columns"
+                all_cols = InfoCenter().get_table_columns(metadata_db, curtbl)
                 for cc in all_cols:
-                    proj_node.output.append(str(cc))
-                    proj_node.keys.append(str(cc))
+                    proj_node.output.append("%s.%s" % (curtbl, cc))
+                    proj_node.keys.append("%s.%s" % (curtbl, cc))
             else:
-                proj_node.output.append( "".join(col))
+                proj_node.output.append("".join(col))
             # check if the column has alias
             if i + 1 < len(columns) and columns[i + 1] == conf.AS:
                 alias = columns[i + 2]
@@ -1087,6 +1102,7 @@ class LogicalPlanMaker:
         tables = []
         attrs = []
         is_in_exp = False # special for prediction: col in (a, b, c)
+        operator = None   # to denote if this is a non-Equi-Join prediction
         for m in range (len(whereexpression)):
             cond = whereexpression[m]
             # cond should be one of
@@ -1102,6 +1118,8 @@ class LogicalPlanMaker:
                 if cond.lower() == "in":
                     exp += "("
                     is_in_exp = True
+                if cond in ["<", ">", "!=", "<>", "<=", ">=", "=", "=="]:
+                    operator = cond
                 continue
             elif len(cond) == 1 or len(cond) == 3 and cond[1] == ".":
                 # case (1)
@@ -1175,6 +1193,7 @@ class LogicalPlanMaker:
             if len(tables) == 2:
                 node = JoinOp()
                 node.keys = attrs
+                node.operator = operator
                 child1 = BasicOp()
                 child1.name = Operator.SCAN
                 child1.expression = tables[0]
@@ -4813,6 +4832,7 @@ class ParaLiteException:
         self.USELESS_QUERY = "ERROR: All data is distributed to udx workers, so this query is actually useless and ParaLite ignores it."
         self.NO_UDX_DEF = "ERROR: You used User-Defined Executable, please define them first"
         self.PARAMETER_ERROR = "ERROR: Please specify right parameters"
+        self.NON_EQUI_JOIN_ERROR = "ERROR: ParaLite cannot support this query with JOIN operations other than Equi-JOIN"
 
 class DataLoader:
     def __init__(self, iom, userconfig):
