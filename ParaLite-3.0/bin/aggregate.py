@@ -544,7 +544,6 @@ class AggregateOp:
 
     def handle_read(self, event):
         message = event.data[10:]
-        ParaLiteLog.debug("MESSAGE: %s" % message)
         m = message.split(conf.SEP_IN_MSG)
         try:        
             if m[0] == conf.JOB_ARGUMENT:
@@ -679,9 +678,9 @@ class AggregateOp:
     def handle_accept(self, event):
         event.new_ch.flag = conf.SOCKET_OUT
         event.new_ch.buf = cStringIO.StringIO()
+        event.new_ch.length = 0
 
     def next_event(self, t):
-        length = 0
         while True:
             ev = self.iom.next_event(None)
             # non read channels are simple.
@@ -700,14 +699,14 @@ class AggregateOp:
                 return ioman_base.event_read(ch, data_to_return, 1, ev.err)
             elif ev.ch.flag == conf.SOCKET_OUT:
                 # the first 10 bytes is the length of the mssage
-                if length == 0:
-                    length = string.atoi(ev.data[0:10])
-                if len(buf.getvalue()) >= length + 10:
+                if ch.length == 0:
+                    ch.length = string.atoi(ev.data[0:10])
+                if len(buf.getvalue()) >= ch.length + 10:
                     all_data = buf.getvalue()
-                    data_to_return = all_data[0:length+10]
+                    data_to_return = all_data[0:ch.length+10]
                     buf.truncate(0)
-                    buf.write(all_data[length+10:])
-                    length = 0
+                    buf.write(all_data[ch.length+10:])
+                    ch.length = 0
                     return ioman_base.event_read(ch, data_to_return, 0, ev.err)
 
     def is_data_ready(self, source_data, num_of_s):
