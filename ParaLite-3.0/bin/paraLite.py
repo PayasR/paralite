@@ -271,8 +271,6 @@ class ParaLite:
                 is_ex = 1
             elif len(m) == 4:
                 opt.record_tag = m[3]
-            else:
-                assert(0), m
 
         if cmd.find("-column_separator") != -1:
             index = m.index("-column_separator")
