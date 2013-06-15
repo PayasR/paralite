@@ -79,6 +79,8 @@ DATA_REPLICA = "DATA REPLICA"
 DATA_DISTRIBUTE = "DATA DISTRIBUTION"
 DATA_DISTRIBUTE_UDX = "DATA DISTRIBUTION UDX"
 NODE_FAIL = "NODE FAILIURE"
+DLOAD_REPLY = "DLOAD REPLY"
+METADATA_INFO = "METADATA INFO"
 
 # job or operator status
 NOT_READY = 'not ready'
@@ -99,6 +101,10 @@ WAIT = 'wait for data'
 MESSAGE_TYPE = 'msg_type'
 REQUEST_INFO = 'request_info'
 JOB_STATUS_INFO = 'job_status_info'
+
+# data load type
+LOAD_FROM_CMD = "load from cmd"
+LOAD_FROM_API = "load from api"
 
 # columns type
 STRING = 'VARCHAR'
@@ -150,6 +156,7 @@ GENERAL_FUNC = ["SUM", "sum", "TOTAL", "total", "AVG", "avg", "COUNT", "count", 
 
 # TAGS
 END_TAG = "end_tag"
+DLOAD_END_TAG = "dload_end_tag"
 
 # Data partition fashion
 HASH_FASHION = "hash"
@@ -174,7 +181,8 @@ MULTI_FILE = "multi files"
 
 # output from process or socket
 SOCKET_OUT = "output from socket"
-PROCESS_OUT = "output from process"
+PROCESS_STDOUT = "standard output from process"
+PROCESS_STDERR = "standard error from process"
 
 # join type
 JOIN = "join"

@@ -776,8 +776,8 @@ class UDXOp:
     (3) files if UDX is the final step and "output_column" is not specified
     """
     def distribute_data(self):
+        row_sep = self.udxes[0].output_row_delimiter
         if self.limit != -1:
-            row_sep = self.udxes[0].output_row_delimiter
             out = cStringIO.StringIO()
             out.write(row_sep.join(
                 self.final_output.getvalue().split(row_sep)[:self.limit]))
@@ -794,26 +794,37 @@ class UDXOp:
                 ParaLiteLog.info(
                     "Final result has size : %s and is stored in file" % os.path.getsize(
                         self.final_output_file))
-                result = [self.final_output_file]
+                data = [self.final_output_file]
             else:
                 ParaLiteLog.info(
                     "Final result has size : %s and is stored in buffer" % len(out.getvalue()))
-                result = out
+                data = out
+
+            self.data = data
+
             if self.udxes[0].output_col_delimiter != conf.NULL:
                 col_sep = self.udxes[0].output_col_delimiter
             else:
                 col_sep = self.db_col_sep
-            master = (self.master_name, self.master_port)
-            
+
             ParaLiteLog.info("LOAD data: START")
-            dload_client.dload_client().load_internal(master, self.cqid, gethostname(),
-                                                      self.dest_db, self.dest_table, result,
-                                                      1, self.fashion, self.hash_key,
-                                                      self.hash_key_pos,
-                                                      self.db_col_sep,
-                                                      self.udxes[0].output_row_delimiter,
-                                                      col_sep, False, "1", LOG_DIR)
-            ParaLiteLog.info("LOAD data: FINISH")
+            master = (self.master_name, self.master_port)
+            # send request to the master
+            t_size = len(data.getvalue())
+            sep = conf.SEP_IN_MSG
+            tag = conf.LOAD_FROM_API
+            if row_sep is None or row_sep == "\n":
+                temp_sep = "NULL"
+            else:
+                temp_sep = row_sep
+            msg = sep.join(
+                str(s) for s in [conf.REQ, self.cqid, gethostname(), 
+                                 self.my_port, self.dest_db, self.dest_table,
+                                 t_size, tag, self.fashion, temp_sep, "0"])
+            so_master = socket(AF_INET, SOCK_STREAM)
+            so_master.connect(master)
+            so_master.send("%10s%s" % (len(msg),msg))
+            so_master.close()
             
             if self.final_output_file is not None:
                 if os.path.exists(self.final_output_file):
@@ -985,7 +996,8 @@ class UDXOp:
 
     def handle_read(self, event):
         message = event.data[10:]
-        m = message.split(conf.SEP_IN_MSG)
+        msg_sep = conf.SEP_IN_MSG
+        m = message.split(msg_sep)
         try:        
             if m[0] == conf.JOB_ARGUMENT:
                 self.parse_args(m[1])
@@ -1010,11 +1022,13 @@ class UDXOp:
                 self.join_all_thread()
                 self.send_rs_info_to_master(self.total_size, self.total_time)
                 # distribute data
-                if self.dest == conf.DATA_TO_DB or self.dest == conf.DATA_TO_ONE_CLIENT:
+                if self.dest == conf.DATA_TO_ONE_CLIENT:
                     self.distribute_data()
                     self.send_status_to_master(self.id, conf.ACK)
                     self.is_running = False
-                
+                elif self.dest == conf.DATA_TO_DB:
+                    self.distribute_data()
+
             elif m[0] == conf.DATA_PERSIST:
                 ParaLiteLog.debug("MESSAGE: %s" % message)                
                 # if the data is requried to be persisted or not
@@ -1030,16 +1044,40 @@ class UDXOp:
                 
                 # DATA message includes: type:id+data
                 # the first 2 chars represents the opid
-                sep = conf.SEP_IN_MSG
                 msg = sep.join([conf.DATA, "%2s%s" % (self.opid, data)])
                 self.send_data_to_node(msg, destnode, self.p_node)
-                ParaLiteLog.debug("send data susscufully   %s %s --> %s" % (self.opid, gethostname(), destnode))
+                ParaLiteLog.debug(
+                    "send data susscufully   %s %s --> %s" % (
+                        self.opid, gethostname(), destnode))
+
+            elif m[0] == conf.DLOAD_REPLY:
+                reply = msg_sep.join(m[1:])
+                ParaLiteLog.info("receive the information from the master")
+                ParaLiteLog.debug(reply)
+                dload_client.dload_client().load_internal_buffer(
+                    reply, self.dest_table, self.data, self.fashion, 
+                    self.hash_key, self.hash_key_pos, self.db_col_sep, 
+                    self.db_row_sep, self.db_col_sep, False, "0", self.log_dir)
+
+                # send END_TAG to the master
+                client_id = "0"
+                msg = msg_sep.join([conf.REQ, conf.END_TAG, gethostname(), client_id])
+                so_master = socket(AF_INET, SOCK_STREAM)
+                so_master.connect((self.master_name, self.master_port))
+                so_master.send("%10s%s" % (len(msg), msg))
+                so_master.close()
+                ParaLiteLog.debug("sending to master: %s" % (conf.END_TAG))
+                ParaLiteLog.debug("----- dload client finish -------")
+
+            elif message == conf.DLOAD_END_TAG:
+                ParaLiteLog.debug("---------import finish---------")
+                self.send_status_to_master(self.id, conf.ACK)
+                self.is_running = False
 
             elif m[0] == conf.DATA_END:
                 ParaLiteLog.debug("MESSAGE: %s" % message)
                 # all data is dipatched to the parent nodes
-                for jobid in self.job_list:
-                    self.send_status_to_master(jobid, conf.ACK)
+                self.send_status_to_master(self.id, conf.ACK)
                 self.is_running = False
                 
             elif message == conf.END_TAG:

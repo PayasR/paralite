@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #prompt
 PS1='\h:\w`gxpc prompt 2> /dev/null`$ '
 

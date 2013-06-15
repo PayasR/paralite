@@ -1204,21 +1204,28 @@ class JoinOp:
             sock.close()
             
         elif self.dest == conf.DATA_TO_DB:
+            self.data = data
             col_sep = self.db_col_sep
             row_sep = self.db_row_sep
             master = (self.master_name, self.master_port)
-            try:
-                ParaLiteLog.info("load data start")
-                dload_client.dload_client().load_internal(
-                    master, self.cqid, gethostname(),self.dest_db,
-                    self.dest_table, data, 1, self.fashion,
-                    self.hash_key, self.hash_key_pos,
-                    self.db_col_sep, row_sep, col_sep,
-                    False, "0", self.log_dir)
-                ParaLiteLog.info("load data finish")
-            except Exception, e:
-                ParaLiteLog.info(traceback.format_exc())
-                es("ERROR: %s: DataLoadError:%s" % (gethostname(), " ".join(e.args)))
+
+            ParaLiteLog.info("proc_select: load data start")
+            # send request to the master
+            t_size = len(data.getvalue())
+            sep = conf.SEP_IN_MSG
+            tag = conf.LOAD_FROM_API
+            if row_sep is None or row_sep == "\n":
+                temp_sep = "NULL"
+            else:
+                temp_sep = row_sep
+            msg = sep.join(
+                str(s) for s in [conf.REQ, self.cqid, gethostname(), 
+                                 self.my_port, self.dest_db, self.dest_table,
+                                 t_size, tag, self.fashion, temp_sep, "0"])
+            so_master = socket(AF_INET, SOCK_STREAM)
+            so_master.connect(master)
+            so_master.send("%10s%s" % (len(msg),msg))
+            so_master.close()
 
     def start(self):
         try:
@@ -1542,10 +1549,12 @@ class JoinOp:
                 self.send_rs_info_to_master(self.total_size, self.total_time)
                 
                 # distribute data
-                if self.dest == conf.DATA_TO_DB or self.dest == conf.DATA_TO_ONE_CLIENT:
+                if self.dest == conf.DATA_TO_ONE_CLIENT:
                     self.distribute_data()
                     self.send_status_to_master(" ".join(self.job_list), conf.ACK)
                     self.is_running = False
+                elif self.dest == conf.DATA_TO_DB:
+                    self.distribute_data()
 
             elif m[0] == conf.DATA_PERSIST:
                 ParaLiteLog.debug("MESSAGE: %s" % message)
@@ -1606,6 +1615,30 @@ class JoinOp:
                     msg = sep.join([conf.DATA, data])
                 self.send_data_to_node(msg, t, addr)
 
+            elif m[0] == conf.DLOAD_REPLY:
+                reply = sep.join(m[1:])
+                ParaLiteLog.info("receive the information from the master")
+                ParaLiteLog.debug(reply)
+                dload_client.dload_client().load_internal_buffer(
+                    reply, self.dest_table, self.data, self.fashion, 
+                    self.hash_key, self.hash_key_pos, self.db_col_sep, 
+                    self.db_row_sep, self.db_col_sep, False, "0", self.log_dir)
+
+                # send END_TAG to the master
+                client_id = "0"
+                msg = sep.join([conf.REQ, conf.END_TAG, gethostname(), client_id])
+                so_master = socket(AF_INET, SOCK_STREAM)
+                so_master.connect((self.master_name, self.master_port))
+                so_master.send("%10s%s" % (len(msg), msg))
+                so_master.close()
+                ParaLiteLog.debug("sending to master: %s" % (conf.END_TAG))
+                ParaLiteLog.debug("----- dload client finish -------")
+
+            elif message == conf.DLOAD_END_TAG:
+                ParaLiteLog.debug("---------import finish---------")
+                self.send_status_to_master(" ".join(self.job_data), conf.ACK)
+                self.is_running = False
+                
             elif m[0] == conf.DATA_END:
                 # all data is dipatched to the parent nodes
                 self.send_status_to_master(" ".join(self.job_list), conf.ACK)

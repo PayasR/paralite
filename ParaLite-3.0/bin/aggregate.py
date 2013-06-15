@@ -272,6 +272,7 @@ class AggregateOp:
             outer_ao_pos = [] 
             new_expr = expr
             new_args = []
+            ParaLiteLog.debug(self.input)
             for ele in _expr:
                 if re.match("(.*)\((.*)\)", ele):
                     parsed_expr = []                                
@@ -764,6 +765,7 @@ class AggregateOp:
 def main():
     if len(sys.argv) != 7:
         sys.exit(1)
+
     proc = AggregateOp()
     proc.master_name = sys.argv[1]
     proc.master_port = string.atoi(sys.argv[2])

@@ -1,6 +1,6 @@
 """ParaLite client which is responsible for receiving user's query
 and starting the master.
-@version: 2.0
+@version: 3.0
 @author: Ting Chen
 """
 # import modules from python standard library
@@ -44,6 +44,7 @@ class ImportCmd:
         self.key_pos = []
         self.record_tag = None
         self.replace = False
+        self.table_columns = []
 
 class XmlToTxt:
     """conversion of xml file to text data
@@ -63,8 +64,12 @@ class XmlToTxt:
             all_tag = ancestor_tags + (t.tagName, )
             if all_tag in columns_path:
                 columns_value[columns_path[all_tag]].append(t.childNodes[0].data)
+            else:
+                assert(0), all_tag
             for c in t.childNodes:
                 self.get_tag_value(c, columns_path, columns_value, all_tag)
+        else:
+            assert(0), "tagName"
 
     def find_columns_path(self, t, column):
         column_dic = {}
@@ -73,7 +78,9 @@ class XmlToTxt:
             tag = l[len(l) - 1]
             if tag not in column_dic:
                 column_dic[tag] = []
-            column_dic[tag].append(tuple(l))
+                column_dic[tag].append(tuple(l))
+            else:
+                column_dic[tag].append(tuple(l))
         self.get_tag_path(t, self.columns_path, column_dic, ())
                 
     def get_tag_path(self, t, columns_path, columns_dic, ancestor_tags):
@@ -174,8 +181,7 @@ class ParaLite:
         self.buf = cStringIO.StringIO()
         self.err = None
         self.exit = 0
-        self.node = None
-        self.master_server = None
+        self.master_node = None
         self.master_port = 0
         self.iom = ioman.mk_ioman()
         self.is_running = True
@@ -184,12 +190,9 @@ class ParaLite:
         self.defaultconf = self.init_default_configs()
         self.db_row_sep = None
         self.db_col_sep = None
+        self.opt = ImportCmd()
         
-        #time_str = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
-
-        self.PROCESS_OUT = 0
-        self.SOCKET_OUT = 1
-
+        
     def init_default_configs(self):
         dic = {}
         #dic[conf.TEMP_DIR] = "/data/local/.paralite-tmp" 
@@ -208,63 +211,59 @@ class ParaLite:
             self.defaultconf[m[0]] = m[1]
             
     
-    def get_db_info(self, cmd_type, database, table, node, port):
-        try:
-            if gethostname() == node:
-                # the client is on the same node with the master, then we directly query the metadata db
-                con = sqlite3.connect(database)
-                con.text_factory = str
-                cr = con.cursor()
-                if cmd_type == "TABLE_COLUMN":
-                    rs = cr.execute('select attribute from table_attr_info where name = "%s"' % (table)).fetchall()
-                    if rs:
-                        re = []
-                        for row in rs:
-                            re.append(row[0])
-                        return re
-                elif cmd_type == "SEPARATOR":
-                    rs = cr.execute('select row_separator, col_separator from setting_info').fetchone()
-                    if rs:
-                        return conf.SEP_IN_MSG.join(rs)
-                elif cmd_type == "PARTITION_KEY":
-                    rs = cr.execute('select partition_key from table_partition_info where name = "%s"' % (table)).fetchone()
-                    return rs[0]
-                return None
-            else:
-                # send query to the master
-                addr = (node, port)
-                sock = socket(AF_INET, SOCK_STREAM)
-                sock.connect(addr)
-                msg = "%s%s%s%s%s%s%s" % (conf.QUE, conf.SEP_IN_MSG, cmd_type,
-                                          conf.SEP_IN_MSG,database, conf.SEP_IN_MSG,
-                                          table)
-                sock.send("%10s%s" % (len(msg), msg))
-                data = recv_bytes(sock, string.atoi(recv_bytes(sock, 10)))
-                sock.close()
-                return data
-        except Exception, e:
-             ParaLiteLog.error(traceback.format_exc())
+    # def get_db_info(self, cmd_type, database, table, node, port):
+    #     try:
+    #         if gethostname() == node:
+    #             # the client is on the same node with the master, then we directly query the metadata db
+    #             con = sqlite3.connect(database)
+    #             con.text_factory = str
+    #             cr = con.cursor()
+    #             if cmd_type == "TABLE_COLUMN":
+    #                 rs = cr.execute('select attribute from table_attr_info where name = "%s"' % (table)).fetchall()
+    #                 if rs:
+    #                     re = []
+    #                     for row in rs:
+    #                         re.append(row[0])
+    #                     return re
+    #             elif cmd_type == "SEPARATOR":
+    #                 rs = cr.execute('select row_separator, col_separator from setting_info').fetchone()
+    #                 if rs:
+    #                     return conf.SEP_IN_MSG.join(rs)
+    #             elif cmd_type == "PARTITION_KEY":
+    #                 rs = cr.execute('select partition_key from table_partition_info where name = "%s"' % (table)).fetchone()
+    #                 return rs[0]
+    #             return None
+    #         else:
+    #             # send query to the master
+    #             addr = (node, port)
+    #             sock = socket(AF_INET, SOCK_STREAM)
+    #             sock.connect(addr)
+    #             msg = "%s%s%s%s%s%s%s" % (conf.QUE, conf.SEP_IN_MSG, cmd_type,
+    #                                       conf.SEP_IN_MSG,database, conf.SEP_IN_MSG,
+    #                                       table)
+    #             sock.send("%10s%s" % (len(msg), msg))
+    #             data = recv_bytes(sock, string.atoi(recv_bytes(sock, 10)))
+    #             sock.close()
+    #             return data
+    #     except Exception, e:
+    #          ParaLiteLog.error(traceback.format_exc())
 
     def parse_import_cmd(self, database, cmd, node, port):
-        opt = ImportCmd()
-        tag = 0
+        opt = self.opt
+        tag = conf.LOAD_FROM_CMD
         table_columns = []
         m = cmd.split()
         opt.file_path = os.path.abspath(m[1])
         opt.table = m[2]
         is_ex = 0
-        hash_key = self.get_db_info("PARTITION_KEY", database, opt.table, node, port)
-        if hash_key is not None and hash_key != '':
+        if opt.key is not None:
             opt.fashion = conf.HASH_FASHION
-            opt.key = hash_key
-            if table_columns == []:
-                table_columns = self.get_db_info("TABLE_COLUMN", database,
-                                                 opt.table, node, port)
-            for hk in hash_key.split(","):
-                opt.key_pos.append(table_columns.index(hk))
-
+            for hk in opt.key.split(","):
+                opt.key_pos.append(opt.table_columns.index(hk))
             if len(m) == 4:
                 opt.record_tag = m[3]
+            else:
+                opt.record_tag = None
         else:
             # data is partitioned based on round_robin-fashion
             opt.fashion = conf.ROUND_ROBIN_FASHION
@@ -272,6 +271,9 @@ class ParaLite:
                 is_ex = 1
             elif len(m) == 4:
                 opt.record_tag = m[3]
+            else:
+                assert(0), m
+
         if cmd.find("-column_separator") != -1:
             index = m.index("-column_separator")
             if len(m) < index + 2:
@@ -289,7 +291,7 @@ class ParaLite:
         if is_ex:
             usage = """Usage: .import file|file_dir table [record_tag]
                                [-column_separator col_sep][-row_separator row_sep]"""
-            Es(usage)
+            es(usage)
             return
         return opt
 
@@ -297,12 +299,8 @@ class ParaLite:
         xml2txt().parse(f_name, table_columns, record_tag, sep, new_file_name)
         
     def load(self, master_node, master_port, database, ctquery):
-        node = master_node
-        port = master_port
-        opt = self.parse_import_cmd(database, ctquery, node, port)
+        opt = self.parse_import_cmd(database, ctquery, master_node, master_port)
         files = []
-        sep = self.get_db_info("SEPARATOR", database, None, node, port)
-        col_sep = sep.split(conf.SEP_IN_MSG)[1]
         procs = []
         f = opt.file_path
         if os.path.isdir(f):
@@ -311,13 +309,10 @@ class ParaLite:
             for fi in os.listdir(f):
                 f_name = f+fi
                 if f_name.endswith(".xml"):
-                    if table_columns == []:
-                        table_columns = self.get_db_info("TABLE_COLUMN",
-                                                         database, table, node, port)
                     new_file = f_name.replace(".xml", ".dat")
                     proc = Process(target=self.parse_xml_file,
-                                   args=(f_name,table_columns, record_tag,
-                                         col_sep, new_file))
+                                   args=(f_name, opt.table_columns, record_tag,
+                                         self.db_col_sep, new_file))
                     procs.start()
                     files.append(new_file)
                     procs.append(proc)
@@ -325,36 +320,39 @@ class ParaLite:
                     files.append(f_name)
         else:
             if f.endswith(".xml"):
-                table_columns = self.get_db_info("TABLE_COLUMN", database,
-                                                 table, node, port)
-                new_file = xml2txt().parse(f, table_columns, record_tag, col_sep)
+                new_file = xml2txt().parse(
+                    f, opt.table_columns, record_tag, self.db_col_sep)
                 files.append(new_file)
             else:
                 files.append(f)
         opt.files = files
         for proc in procs:
             proc.join()
+
+        # send request to the master
+        total_size = 0
+        for f in opt.files:
+            total_size += os.path.getsize(f)
+
+        so_master = socket(AF_INET, SOCK_STREAM)
+        so_master.connect((master_node, master_port))
+        #REQ:cqid:NODE:PORT:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:row_sep
+        if opt.row_sep is None or opt.row_sep == "\n":
+            temp_sep = "NULL"
+        else:
+            temp_sep = opt.row_sep
+        sep = conf.SEP_IN_MSG
+        tag = conf.LOAD_FROM_CMD 
+        client_id = 0
         my_node = gethostname()
-        master = (node, port)
-        self.start_load(master, "", my_node, database, 0, col_sep, opt)
-        
-    def start_load(self, master, cqid, node, database, tag, db_col_sep, opt):
-        ParaLiteLog.info("start to load")
-        table = opt.table
-        files = opt.files
-        fashion = opt.fashion
-        key = opt.key
-        key_pos = opt.key_pos
-        row_sep = opt.row_sep
-        col_sep = opt.col_sep
-        ParaLiteLog.debug("============DATA LOADING CLIENT=============")
-        dload_client.dload_client().load_internal(master, cqid, node, database, table,
-                                                  files, 0, fashion, key, key_pos,
-                                                  db_col_sep, row_sep, col_sep,
-                                                  opt.replace, "0",
-                                                  self.defaultconf[conf.LOG_DIR])
-        ParaLiteLog.debug("============DATA LOADING CLIENT=============")        
-        ParaLiteLog.info("%s: FINISH" % (self.start_load.__name__))
+        my_port = self.my_port
+        msg = sep.join([conf.REQ, self.cqid, my_node, str(my_port), database, 
+                        opt.table, str(total_size), str(tag), opt.fashion, 
+                        temp_sep, str(client_id)])
+
+        so_master.send("%10s%s" % (len(msg), msg))
+        so_master.close()
+        ParaLiteLog.info("send a request to the master")
         
     def parse(self, argv):
         if len(argv) == 2 and argv[1].lower() == "help":
@@ -414,7 +412,7 @@ class ParaLite:
         elif ctquery.lower().startswith("pragma"):
             self.args = ["pragma", database, ctquery]
         else:
-            Es("ERROR: the syntax of your query is wrong, please check!\n")
+            es("ERROR: the syntax of your query is wrong, please check!\n")
 
         if ctquery.find("collective by") != -1:
             m = string.strip(ctquery).split()
@@ -472,12 +470,12 @@ class ParaLite:
         pipes = [ (None, "w", 0), (None, "r", 1), (None, "r", 2) ]
         pid, r_chans, w_chans, err = self.iom.create_process(cmd.split(), None,
                                                              None, pipes, None)
-        if err:
-            Es("Create the master process failed: %s\n" % (err))
-            sys.exit(1)
+
+        r_chans[0].flag = conf.PROCESS_STDOUT
+        r_chans[1].flag = conf.PROCESS_STDERR
         for ch in r_chans:
-            ch.flag = self.PROCESS_OUT
             ch.buf = cStringIO.StringIO()
+
         if self.ctquery.startswith(".import"):
             self.wait("import", 1)
             return
@@ -505,6 +503,8 @@ class ParaLite:
                 self.my_port = s
             elif e != m_p:
                 self.my_port = e
+            else:
+                assert(0), confinfo[conf.PORT_RANGE]
         s = cPickle.dumps(confinfo)
         b = base64.encodestring(s)
         str_confinfo = string.replace(b, '\n', '*') # delete new line
@@ -540,20 +540,19 @@ class ParaLite:
                                                               str_confinfo)
         # start the master
         if token == 1:
-
             if gethostname() != self.master_node:
                 #cmd = 'gxpc e -h %s %s' % (self.master_node, cmd)
                 cmd = 'ssh %s %s' % (self.master_node, cmd)
             ParaLiteLog.debug(cmd)
             pipes = [ (None, "w", 0), (None, "r", 1), (None, "r", 2) ]
-            pid, r_chans, w_chans, err = self.iom.create_process(cmd.split(), None,
-                                                                 None, pipes, None)
-            if err:
-                Es("Create the master process failed: %s\n" % (err))
-                sys.exit(1)
+            pid, r_chans, w_chans, err = self.iom.create_process(
+                cmd.split(), None, None, pipes, None)
+
+            r_chans[0].flag = conf.PROCESS_STDOUT
+            r_chans[1].flag = conf.PROCESS_STDERR
             for ch in r_chans:
-                ch.flag = self.PROCESS_OUT
                 ch.buf = cStringIO.StringIO()
+
         else:
             self.is_master_running = False
             self.master_node, self.master_port = self.get_master_info()
@@ -568,19 +567,22 @@ class ParaLite:
         # self.dump(string.strip(self.buf.getvalue()), 1)
 
     def dump(self, data, is_end):
-        if self.output is not None and len(data) > 0:
-            if self.output == "stdout" or self.ctquery.startswith("."):
-                sys.stdout.write("%s\n" % data.strip())
-            else:
-                f = open(self.output, "a")
-                f.write("%s\n" % data.strip())
-                if is_end == 1:
-                    f.write("\n")
-                f.close()
+        if self.output is not None:
+            if len(data) > 0:
+                if self.output == "stdout" or self.ctquery.startswith("."):
+                    sys.stdout.write("%s\n" % data.strip())
+                else:
+                    f = open(self.output, "a")
+                    f.write("%s\n" % data.strip())
+                    if is_end == 1:
+                        f.write("\n")
+                    f.close()
+        else:
+            assert(0), self.output
         
     def handle_accept(self, event):
         ch = event.new_ch
-        ch.flag = self.SOCKET_OUT
+        ch.flag = conf.SOCKET_OUT
         ch.buf = cStringIO.StringIO()
         ch.length = 0
 
@@ -593,21 +595,24 @@ class ParaLite:
         if not self.is_local_server_running and not self.is_master_running:
             self.is_running = False
         if status == 1:
-            sys.stderr.write("The master process is failed on %s: %s\n" % (self.master_node, err))
+            es("The master process is failed on %s: %s\n" % (self.master_node, err))
         ParaLiteLog.debug("END <-- The master process ")
         
     def handle_read(self, event, tag):
         flag = event.ch.flag
-        if flag == self.PROCESS_OUT:
-            ParaLiteLog.debug("handle_read from master")            
+        if flag == conf.PROCESS_STDOUT or flag == conf.PROCESS_STDERR:
+            ParaLiteLog.debug("receive message from the pipe of master")   
             self.handle_read_from_master(event)
-        elif flag == self.SOCKET_OUT:
+        elif flag == conf.SOCKET_OUT:
             ParaLiteLog.debug("handle_read from socket")            
             self.handle_read_from_socket(event, tag)
+        else:
+            assert(0), flag
 
     def handle_read_from_master(self, event):
         if string.strip(event.data) == "98" or event.data.startswith("ssh_exchange_identification"):
-            ParaLiteLog.debug("receive error %s : it should not start the master" % (event.data))
+            ParaLiteLog.debug(
+                "receive error %s : it should not start the master" % (event.data))
             # If multiple clients start the master at the same,
             # only one will success and others will receive a error "98"
             self.is_master_running = False
@@ -615,23 +620,29 @@ class ParaLite:
                                     self.database, self.ctquery)
             ParaLiteLog.info("register_to_master %s:%s : FINISH" % (self.master_node,
                                                            self.master_port))
-        elif event.data.startswith("ERROR"):
-            Es(event.data)
-            self.is_running = False
         else:
-            #Es(event.data)
+            es(event.data)
+            self.is_running = False
             self.is_master_running = False
         
     def handle_read_from_socket(self, event, tag):
         message = event.data[10:]
+        sep = conf.SEP_IN_MSG
         if message == "OK":
             self.is_local_server_running = False
             ParaLiteLog.debug("closed the local server")
             if not self.is_local_server_running and not self.is_master_running:
                 self.is_running = False
+
+        elif message == conf.DLOAD_END_TAG:
+            ParaLiteLog.debug("---------import finish---------")
+            self.is_local_server_running = False
+            if not self.is_local_server_running and not self.is_master_running:
+                self.is_running = False
+
         elif message.startswith(conf.INFO):
             # INFO:port
-            m = message.split(conf.SEP_IN_MSG)
+            m = message.split(sep)
             assert len(m) == 2
             if m[1] != conf.MASTER_READY:
                 self.master_port = string.atoi(m[1])
@@ -640,27 +651,71 @@ class ParaLite:
                 ParaLiteLog.debug("set_master_info: FINISH")
                 self.register_to_master(self.master_node, self.master_port,
                                         self.database, self.ctquery)
-                ParaLiteLog.info("register_to_master %s:%s : FINISH" % (self.master_node,
-                                                               self.master_port))
+                ParaLiteLog.info(
+                    "register_to_master %s:%s : FINISH" % (
+                        self.master_node, self.master_port))
             elif tag == "import":
                 self.is_local_server_running = False
-                self.load(self.master_node, self.master_port,
-                          self.database, self.ctquery)
+                # send metadata query to the master
+                addr = (self.master_node, self.master_port)
+                sock = socket(AF_INET, SOCK_STREAM)
+                sock.connect(addr)
+                table = self.ctquery.split()[2]
+                my_node = gethostname()
+                msg = sep.join(
+                    [conf.QUE, my_node, str(self.my_port), self.database, table])
+                sock.send("%10s%s" % (len(msg), msg))
+                sock.close()
+
             elif tag == "special":
-                self.register_to_master(self.master_node, self.master_port,
-                                        self.database, self.ctquery)
+                self.register_to_master(
+                    self.master_node, self.master_port, self.database, self.ctquery)
+            else:
+                assert(0), tag
+
+        elif message.startswith(conf.METADATA_INFO):
+            # METADATA_INFO:TABLE_COLUMNS:HASH_KEY:DB_ROW_SEP:DB_COL_SEP
+            ParaLiteLog.debug(message)
+            tc, key, self.db_row_sep, self.db_col_sep = message.split(sep)[1:]
+            self.opt.table_columns = tc.split()
+            if key == "NULL":
+                self.opt.key = None
+            else:
+                self.opt.key = key
+            self.load(
+                self.master_node, self.master_port, self.database, self.ctquery)
+
         elif message.startswith(conf.DB_INFO):
+            ParaLiteLog.debug(message)
             # DB_INFO:output:row_sep:col_sep
-            m = message.split(conf.SEP_IN_MSG)
+            m = message.split(sep)
             assert len(m) == 4
             self.output = m[1]
             if self.output != "stdout" and not self.ctquery.startswith("."):
                 if os.path.exists(self.output): os.remove(self.output)
             self.db_row_sep = m[2]
             self.db_col_sep = m[3]
+
         elif message.startswith("ERROR"):
-            Es(message + "\n")
+            es(message + "\n")
             self.is_running = False
+
+        elif message.startswith(conf.DLOAD_REPLY):
+            reply = sep.join(message.split(sep)[1:])
+            ParaLiteLog.info("receive the information from the master")
+            dload_client.dload_client().load_internal_file(
+                reply, self.opt, self.db_col_sep, self.defaultconf[conf.LOG_DIR])
+
+            # send END_TAG to the master
+            client_id = "0"
+            msg = sep.join([conf.REQ, conf.END_TAG, gethostname(), client_id])
+            so_master = socket(AF_INET, SOCK_STREAM)
+            so_master.connect((self.master_node, self.master_port))
+            so_master.send("%10s%s" % (len(msg), msg))
+            so_master.close()
+            ParaLiteLog.debug("sending to master: %s" % (conf.END_TAG))
+            ParaLiteLog.debug("----- dload client finish -------")
+
         else:
             self.buf.write(message.strip() + self.db_row_sep)
             """
@@ -689,7 +744,9 @@ class ParaLite:
             fd = open(self.hub[1], "a")
             fd.write(" %s" % (master_port))
             fd.close()
-
+        else:
+            assert(0), self.hub
+        
     def get_master_info(self):
         node = None
         port = 0
@@ -700,7 +757,7 @@ class ParaLite:
                     sql = "select node, port from hub_info where cqid='%s'" % (self.cqid)
                     rs = con.execute(sql).fetchone()
                     if rs is None:
-                        Es("Error: Database %s does not have the information of query %s, you may delete it by mistake, please check it!" % (self.hub[1], self.cqid))
+                        es("Error: Database %s does not have the information of query %s, you may delete it by mistake, please check it!" % (self.hub[1], self.cqid))
                         break
                     else:
                         port = rs[1]
@@ -751,11 +808,13 @@ class ParaLite:
                         self.handle_read(ev, action)
                 elif isinstance(ev, ioman_base.event_death):
                     self.handle_death(ev)
+                else:
+                    assert(0), ev
             
         except KeyboardInterrupt, e:
-            Es("ParaLite receives a interrupt signal and then will close the process\n")
-            if self.is_master_running:
-                self.safe_kill_master(self.master_node, self.master_port)
+            es("ParaLite receives a interrupt signal and then will close the process\n")
+            #if self.is_master_running:
+            #    self.safe_kill_master(self.master_node, self.master_port)
             #sys.exit(1)
         finally:
             if token == 1:
@@ -771,6 +830,7 @@ class ParaLite:
             con.close()
         elif self.hub[0] == 1:
             os.remove(self.hub[1])
+        
 
     def do_help_cmd(self, args):
         u = """Usage: paralite /path/to/db STATEMENT [--hub]
@@ -806,8 +866,6 @@ Examples:
         except Exception, e:
             ParaLiteLog.error("Error in register_to_master: %s" % (" ".join(str(s) for s in e.args)))
             print "Error in register_to_master: %s" % (" ".join(str(s) for s in e.args))
-            if e.errno == 4:
-                sock.connect(addr)
                 
         sock.send('%10s%s' % (len(msg), msg))
         sock.close()
@@ -887,9 +945,10 @@ Examples:
             except Exception, e:
                 print e.args
                 return -1
+        else:
+            assert(0), hub_type
 
     def next_event(self, t):
-        length = 0
         while True:
             ev = self.iom.next_event(None)
             # non read channels are simple.
@@ -905,7 +964,7 @@ Examples:
             if ev.eof:
                 data_to_return = ch.buf.getvalue()
                 return ioman_base.event_read(ch, data_to_return, 1, ev.err)
-            elif ev.ch.flag == self.SOCKET_OUT:
+            elif ev.ch.flag == conf.SOCKET_OUT:
                 # the first 10 bytes is the length of the mssage
                 if ch.length == 0:
                     ch.length = string.atoi(ev.ch.buf.getvalue()[0:10])
@@ -917,12 +976,20 @@ Examples:
                     ch.length = 0
                     ev.ch.so.send("OK")
                     return ioman_base.event_read(ch, data_to_return, 0, ev.err)
+            elif ev.ch.flag == conf.PROCESS_STDOUT or ev.ch.flag == conf.PROCESS_STDERR:
+                # if the message comes from pipes of the child process, wait all
+                # message until a eof is found
+                ParaLiteLog.debug("Receive a message from a child process")
+            else:
+                assert(0), ev.ch.flag
 
     def execute(self, argv):
         c = "do_%s_cmd" % (argv[0])
         if hasattr(self, c):
             method = getattr(self, c)
             method(argv[1:])
+        else:
+            assert(0), c
             
     def main(self, argv, flag):
         # flag = 1: invoked from program
@@ -957,7 +1024,7 @@ Please enter \"paralite help\" for more information."""
             if e.errno == 17:
                 pass
         except Exception:
-            Es("ERROR: cannot create log and temp directory: %s\n" % traceback.format_exc())
+            es("ERROR: cannot create log and temp directory: %s\n" % traceback.format_exc())
             sys.exit(1)
         cur_time = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
         ParaLiteLog.init("%s/paralite-%s-%s-%s.log" % (log_dir, gethostname(),
@@ -986,10 +1053,10 @@ def recv_bytes(so, n):
         n = n - len(x)
     return string.join(A, "")
 
-def Ws(s):
+def ws(s):
     sys.stdout.write(s)
 
-def Es(s):
+def es(s):
     sys.stderr.write(s)
     
 if __name__ == "__main__":

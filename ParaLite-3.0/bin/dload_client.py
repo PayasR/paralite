@@ -17,7 +17,7 @@ sys.path.append(os.path.abspath(os.path.join(sys.path[0], os.path.pardir)))
 import conf
 from lib.logger import ParaLiteLog
 
-DATA_MAX_SIZE = 4*1024*1024*1024            # 1GB
+DATA_MAX_SIZE = 2*1024*1024*1024            # 2GB
 
 class dload_client:
     def __init__(self):
@@ -192,43 +192,30 @@ class dload_client:
     def range_data(self):
         ParaLiteLog.info("Now RANGE FASHION is not supported...")
         
-    def load_internal(self, master, cqid, node, database, table, files, tag,
-                      fashion, key, key_pos, db_col_sep, row_sep, col_sep,
-                      is_replace, client_id, LOG_DIR):
-        cur_time = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
-        if tag == 0 or (tag == 1 and isinstance(files, list)):
-            self.load_internal_file(master, cqid, node, database, table, files,
-                                    tag, fashion, key, key_pos, db_col_sep, row_sep,
-                                    col_sep, is_replace, client_id, LOG_DIR)
-        else:
-            self.load_internal_buffer(master, cqid, node, database, table, files,
-                                      tag, fashion, key, key_pos, db_col_sep, row_sep,
-                                      col_sep, is_replace, client_id, LOG_DIR)
+    # def load_internal(self, master, cqid, node, port, database, table, files, tag,
+    #                   fashion, key, key_pos, db_col_sep, row_sep, col_sep,
+    #                   is_replace, client_id, LOG_DIR):
+    #     cur_time = time.strftime('%Y-%m-%d-%H-%M-%S',time.localtime(time.time()))
+    #     if tag == 0 or (tag == 1 and isinstance(files, list)):
+    #         self.load_internal_file(master, cqid, node, database, table, files,
+    #                                 tag, fashion, key, key_pos, db_col_sep, row_sep,
+    #                                 col_sep, is_replace, client_id, LOG_DIR)
+    #     else:
+    #         self.load_internal_buffer(master, cqid, node, port, database, table, 
+    #                                   files,
+    #                                   tag, fashion, key, key_pos, db_col_sep, row_sep,
+    #                                   col_sep, is_replace, client_id, LOG_DIR)
 
-    def load_internal_buffer(self, master, cqid, node, database, table, buf, tag,
-                             fashion, key, key_pos, db_col_sep, row_sep, col_sep,
-                             is_replace, client_id, LOG_DIR):
+    def load_internal_buffer(self, reply, table, buf, fashion, key, key_pos, 
+                             db_col_sep, row_sep, col_sep, is_replace, client_id, 
+                             LOG_DIR):
         ParaLiteLog.info("load_internal: START")
         ParaLiteLog.info("row separator = %s col separator = %s" % (row_sep, col_sep) )
         self.db_col_sep = db_col_sep
         total_size = len(buf.getvalue())
-        send_size = 0
         try:
-
-            so_master = socket(AF_INET, SOCK_STREAM)
-            so_master.connect(master)
-            #REQ:cqid:NODE:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:row_sep
-            temp_sep = row_sep
-            if row_sep is None or row_sep == "\n":
-                temp_sep = "NULL"
-            sep = conf.SEP_IN_MSG
-            msg = sep.join(str(s) for s in [conf.REQ, cqid, node, database, table,
-                                            total_size, tag, fashion, temp_sep, client_id])
-            so_master.send("%10s%s" % (len(msg), msg))
-            ParaLiteLog.info("send a request to the master")
-            length = self.recv_bytes(so_master, 10)
             """
-            received message = nodes # sub_dbs # chunk_num # replica_info # client_number
+            received message = nodes # sub_dbs # chunk_num # replica_info 
             
             nodes should be:
             n1:p1:l1 , n2:p2:l2 , ...               IF fashion = HASH_FASHION 
@@ -238,7 +225,7 @@ class dload_client:
             node_db_info: db_1_1 , db_1_2 , db_2_1, ...
             replica_info: db_1_1 db_1_1_r_1 node1 , db_1_2 db_1_2_r_1 node2 , ...
             """
-            mm = self.recv_bytes(so_master, string.atoi(length)).split("#")
+            mm = reply.split("#")
             if total_size == 0:
                 sep = conf.SEP_IN_MSG
                 msg = "%s%s%s%s%s%s%s" % (conf.REQ, sep, conf.END_TAG, sep,
@@ -257,7 +244,6 @@ class dload_client:
             sub_dbs = mm[1].split(",")
             chunk_num = string.atoi(mm[2])
             replica = mm[3]
-            client_id = mm[4]
             
             replica_info = {} # {db_name : {replica_db_name:node}}
             if replica != "":
@@ -374,51 +360,29 @@ class dload_client:
                         i += 1
                 for thd in thds:
                     thd.join()
-            ss2 = time.time()
-            sep = conf.SEP_IN_MSG
-            msg = "%s%s%s%s%s%s%s" % (conf.REQ, sep, conf.END_TAG, sep,
-                                      gethostname(), sep, client_id)
-            so_master.send("%10s%s" % (len(msg), msg))
-            ParaLiteLog.info("sending to master: %s" % (conf.END_TAG))
-            l = string.atoi(self.recv_bytes(so_master, 10))
-            reply = self.recv_bytes(so_master, l)
-            ParaLiteLog.info("receive from master: %s" % (reply))
-            assert reply == conf.END_TAG
-            so_master.close()
-            ss3 = time.time()
-        except:
-            ParaLiteLog.info(traceback.format_exc())
+        except Exception, e:
+            raise(e)
 
         
-    def load_internal_file(self, master, cqid, node, database, table, files,
-                           tag, fashion, key, key_pos, db_col_sep, row_sep,
-                           col_sep, is_replace, client_id, LOG_DIR):
-        global log
-        ParaLiteLog.info("load_internal: START")
-        ParaLiteLog.info("row separator = %s col separator = %s" % (row_sep, col_sep) )
+    def load_internal_file(self, reply, opt, db_col_sep, LOG_DIR):
+        ParaLiteLog.info("load_internal_file: START")
+        table = opt.table
+        files = opt.files
+        col_sep = opt.col_sep
+        row_sep = opt.row_sep
+        fashion = opt.fashion
+        key = opt.key
+        key_pos = opt.key_pos
+        is_replace = opt.replace
+
         self.db_col_sep = db_col_sep        
-        total_size = 0
         for f in files:
             self.files[f] = 1
-            total_size += os.path.getsize(f)
         self.file_reader = open(self.get_next_file(), "rb")
-        send_size = 0
-        try:
-            so_master = socket(AF_INET, SOCK_STREAM)
-            so_master.connect(master)
-            #REQ:cqid:NODE:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:row_sep
-            temp_sep = row_sep
-            if row_sep is None or row_sep == "\n":
-                temp_sep = "NULL"
-            sep = conf.SEP_IN_MSG
-            msg = sep.join([conf.REQ, cqid, node, database, table, str(total_size),
-                            str(tag), fashion, temp_sep, client_id])
 
-            so_master.send("%10s%s" % (len(msg), msg))
-            ParaLiteLog.info("send a request to the master")
-            length = self.recv_bytes(so_master, 10)
+        try:
             """
-            received message = nodes # sub_dbs # chunk_num # replica_info # client_number
+            received message = nodes # sub_dbs # chunk_num # replica_info 
             
             nodes should be (| is SEP_IN_MSG):
             n1 : p1|l1 , n2 : p2|l2 , ...               IF fashion = HASH_FASHION 
@@ -428,13 +392,12 @@ class dload_client:
             node_db_info: node1:[db_1_1] , node2:[db_1_2] , node3:[db_2_1], ...
             replica_info: db_1_1 db_1_1_r_1 node1 , db_1_2 db_1_2_r_1 node2 , ...
             """
-            mm = self.recv_bytes(so_master, string.atoi(length)).split("#")
-            ParaLiteLog.info("receive the information from the master")
+            mm = reply.split("#")
+
             nodes = mm[0].split(",")
             sub_dbs = mm[1].split(",")
             chunk_num = string.atoi(mm[2])
             replica = mm[3]
-            client_id = mm[4]
             
             replica_info = {} # {db_name : {replica_db_name:node}}
             if replica != "":
@@ -464,7 +427,7 @@ class dload_client:
                             break
                         ParaLiteLog.info("really get data as bk: %s" % (len(dst)))
                         pos = dst.rfind(row_sep)
-                        ParaLiteLog.info(pos)
+
                         ds =  left_ds + dst[0:pos]
                         left_ds = dst[pos+len(row_sep):]
                         del dst
@@ -551,21 +514,22 @@ class dload_client:
                             break
                         ParaLiteLog.info("really get data as bk: %s" % (len(ds)))
                         pos = ds.rfind(row_sep)
-                        ParaLiteLog.info(pos)
                         send_ds =  left_ds + ds[0:pos]
                         left_ds = ds[pos+len(row_sep):]
-                        thd = threading.Thread(target=self.send_to_node,
-                                               args=(db, table, send_ds, node_addr[node],
-                                                     row_sep, col_sep, is_replace))
+                        thd = threading.Thread(
+                            target=self.send_to_node,
+                            args=(db, table, send_ds, node_addr[node],
+                                  row_sep, col_sep, is_replace))
                         thd.setDaemon(True)
                         thd.start()
                         thds.append(thd)
                         if db in replica_info:
                             for rdb in replica_info[db]:
                                 node = replica_info[db][rdb]
-                                thd = threading.Thread(target=self.send_to_node,
-                                                       args=(rdb, table, ds, node_addr[node],
-                                                             row_sep, col_sep, is_replace))
+                                thd = threading.Thread(
+                                    target=self.send_to_node,
+                                    args=(rdb, table, ds, node_addr[node],
+                                          row_sep, col_sep, is_replace))
                                 thd.setDaemon(True)
                                 thd.start()
                                 thds.append(thd)
@@ -579,7 +543,8 @@ class dload_client:
                         node = db.split("_")[-3]
                         size = string.atoi(m[3]) / chunk_num + 1
                         if size > DATA_MAX_SIZE:
-                            ParaLiteLog.info("start to get data as bk: %s" % (DATA_MAX_SIZE))  
+                            ParaLiteLog.info(
+                                "start to get data as bk: %s" % (DATA_MAX_SIZE))  
                             ds = self.get_data_as_bk(DATA_MAX_SIZE)
                         else:
                             ParaLiteLog.info("start to get data as bk: %s" % (size))
@@ -588,10 +553,10 @@ class dload_client:
                             ParaLiteLog.info("really get data as bk: 0")
                             break
                         ParaLiteLog.info("really get data as bk: %s" % (len(ds)))
-                        thd = threading.Thread(target=self.send_to_node,
-                                               args=(db, table, ds, node_addr[node],
-                                                     row_sep,col_sep,
-                                                     is_replace))
+                        thd = threading.Thread(
+                            target=self.send_to_node,
+                            args=(db, table, ds, node_addr[node],
+                                  row_sep,col_sep, is_replace))
                         thd.setDaemon(True)
                         thd.start()
                         thds.append(thd)
@@ -599,9 +564,10 @@ class dload_client:
                             for rdb in replica_info[db]:
                                 ParaLiteLog.info(rdb)
                                 node = replica_info[db][rdb]
-                                thd = threading.Thread(target=self.send_to_node,
-                                                       args=(rdb, table, ds, node_addr[node],
-                                                             row_sep, col_sep, is_replace))
+                                thd = threading.Thread(
+                                    target=self.send_to_node,
+                                    args=(rdb, table, ds, node_addr[node],
+                                          row_sep, col_sep, is_replace))
                                 thd.setDaemon(True)
                                 thd.start()
                                 thds.append(thd)
@@ -609,24 +575,249 @@ class dload_client:
                         del ds
             for thd in thds:
                 thd.join()
-            ss2 = time.time()
-            """
-            sss = socket(AF_INET, SOCK_STREAM)
-            sss.connect(master)
-            msg = "%s%s%s" % (conf.REQ, conf.SEP_IN_MSG, conf.END_TAG)
-            sss.send("%10s%s" % (len(msg), msg))
-            """
-            sep = conf.SEP_IN_MSG
-            msg = "%s%s%s%s%s%s%s" % (conf.REQ, sep, conf.END_TAG, sep,
-                                      gethostname(), sep, client_id)
-            so_master.send("%10s%s" % (len(msg), msg))
-            ParaLiteLog.info("sending to master: %s" % (conf.END_TAG))
-            l = string.atoi(self.recv_bytes(so_master, 10))
-            reply = self.recv_bytes(so_master, l)
-            ParaLiteLog.info("receive from master: %s" % (reply))
-            assert reply == conf.END_TAG
-            so_master.close()
-            ss3 = time.time()
-        except:
-            ParaLiteLog.info(traceback.format_exc())
+        except Exception, e:
+            ParaLiteLog.debug(traceback.format_exc())
+            raise(Exception(traceback.format_exc()))
+
+
+    # def load_internal_file(self, master, cqid, node, database, table, files,
+    #                        tag, fashion, key, key_pos, db_col_sep, row_sep,
+    #                        col_sep, is_replace, client_id, LOG_DIR):
+    #     global log
+    #     ParaLiteLog.info("load_internal_file: START")
+
+    #     self.db_col_sep = db_col_sep        
+    #     total_size = 0
+    #     for f in files:
+    #         self.files[f] = 1
+    #         total_size += os.path.getsize(f)
+    #     self.file_reader = open(self.get_next_file(), "rb")
+    #     try:
+    #         so_master = socket(AF_INET, SOCK_STREAM)
+    #         so_master.connect(master)
+    #         #REQ:cqid:NODE:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:row_sep
+    #         temp_sep = row_sep
+    #         if row_sep is None or row_sep == "\n":
+    #             temp_sep = "NULL"
+    #         sep = conf.SEP_IN_MSG
+    #         msg = sep.join([conf.REQ, cqid, node, database, table, str(total_size),
+    #                         str(tag), fashion, temp_sep, client_id])
+
+    #         so_master.send("%10s%s" % (len(msg), msg))
+    #         ParaLiteLog.info("send a request to the master")
+    #         length = self.recv_bytes(so_master, 10)
+    #         """
+    #         received message = nodes # sub_dbs # chunk_num # replica_info # client_number
+            
+    #         nodes should be (| is SEP_IN_MSG):
+    #         n1 : p1|l1 , n2 : p2|l2 , ...               IF fashion = HASH_FASHION 
+    #         n1 : p1|l1|s1|num , n2 : p2|l2|s2|num , ... IF fashion = ROUND_ROBIN
+    #         TBD                                     IF fashion = RANGE_FASHION
+
+    #         node_db_info: node1:[db_1_1] , node2:[db_1_2] , node3:[db_2_1], ...
+    #         replica_info: db_1_1 db_1_1_r_1 node1 , db_1_2 db_1_2_r_1 node2 , ...
+    #         """
+    #         mm = self.recv_bytes(so_master, string.atoi(length)).split("#")
+    #         ParaLiteLog.info("receive the information from the master")
+    #         nodes = mm[0].split(",")
+    #         sub_dbs = mm[1].split(",")
+    #         chunk_num = string.atoi(mm[2])
+    #         replica = mm[3]
+    #         client_id = mm[4]
+            
+    #         replica_info = {} # {db_name : {replica_db_name:node}}
+    #         if replica != "":
+    #             for whole_re in replica.split(","):
+    #                 lll = whole_re.split(" ")
+    #                 if lll[0] not in replica_info:
+    #                     replica_info[lll[0]] = {}
+    #                 replica_info[lll[0]][lll[1]] = lll[2]
+
+    #         node_addr = {} # {node:addr}
+    #         for node in nodes:
+    #             m = node.split(conf.SEP_IN_MSG)
+    #             if m[0] == gethostname(): addr = m[2]
+    #             else: addr = (m[0], string.atoi(m[1]))
+    #             node_addr[m[0]] = addr
+            
+    #         thds = []
+    #         if nodes == []:
+    #             ParaLiteLog.info("there is no data to load")
+    #         elif fashion == conf.HASH_FASHION:
+    #             ParaLiteLog.info(fashion)
+    #             if row_sep is not None and row_sep != "\n":
+    #                 while True:
+    #                     dst = self.get_data_as_bk(DATA_MAX_SIZE)
+    #                     if dst is None:
+    #                         ParaLiteLog.info("really get data as bk: 0")
+    #                         break
+    #                     ParaLiteLog.info("really get data as bk: %s" % (len(dst)))
+    #                     pos = dst.rfind(row_sep)
+    #                     ParaLiteLog.info(pos)
+    #                     ds =  left_ds + dst[0:pos]
+    #                     left_ds = dst[pos+len(row_sep):]
+    #                     del dst
+    #                     db_buf = self.hash_data_file(ds, key_pos, nodes,
+    #                                                    row_sep, col_sep,
+    #                                                    chunk_num, sub_dbs)
+    #                     ParaLiteLog.debug("hash data finish %s" % len(ds))
+    #                     del ds                        
+    #                     for db in db_buf:
+    #                         data = db_buf[db].getvalue()
+    #                         node = db.split("_")[-3]
+    #                         thd = threading.Thread(target=self.send_to_node,
+    #                                                args=(db, table, data, node_addr[node],
+    #                                                      row_sep,col_sep,
+    #                                                      is_replace))
+    #                         thd.setDaemon(True)
+    #                         thd.start()
+    #                         thds.append(thd)
+    #                         if db in replica_info:
+    #                             for rdb in replica_info[db]:
+    #                                 node = replica_info[db][rdb]
+    #                                 self.send_to_node(rdb, table, data,
+    #                                                   node_addr[node],
+    #                                                   row_sep, col_sep, is_replace)
+
+    #             else:
+    #                 while True:
+    #                     ds = self.get_data_as_bk(DATA_MAX_SIZE)
+    #                     if ds is None:
+    #                         ParaLiteLog.info("really get data as bk: 0")
+    #                         break
+    #                     ParaLiteLog.info("really get data as bk: %s" % (len(ds)))
+    #                     db_buf = self.hash_data_file(ds, key_pos, nodes,
+    #                                                    "\n", col_sep, chunk_num, sub_dbs)
+    #                     for db in db_buf:
+    #                         ParaLiteLog.debug(
+    #                             "%s -- > %s" % (db, len(db_buf[db].getvalue())))
+    #                         break
+    #                     for db in db_buf:
+    #                         data = db_buf[db].getvalue()
+    #                         node = db.split("_")[-3]
+
+    #                         thd = threading.Thread(target=self.send_to_node,
+    #                                                args=(db, table, data,
+    #                                                      node_addr[node],
+    #                                                      row_sep,col_sep,
+    #                                                      is_replace))
+    #                         thd.setDaemon(True)
+    #                         thd.start()
+    #                         thds.append(thd)
+    #                         if db in replica_info:
+    #                             for rdb in replica_info[db]:
+    #                                 node = replica_info[db][rdb]
+    #                                 self.send_to_node(rdb, table, data,
+    #                                                   node_addr[node],
+    #                                                   row_sep, col_sep, is_replace)
+    #                     del db_buf        
+    #                     del ds
+                        
+    #         elif fashion == conf.REPLICATE_FASHION:
+    #             self.replicate_data(table, files, total_size, nodes)
+    #         elif fashion == conf.RANGE_FASHION:
+    #             self.range_data()
+    #         else:
+    #             num_of_db = len(nodes) * chunk_num                
+    #             if row_sep is not None and row_sep != "\n":
+    #                 i = 0
+    #                 left_ds = ""
+    #                 while True:
+    #                     db = sub_dbs[i % num_of_db]
+    #                     #m = nodes[(i % num_of_db) / chunk_num].split(conf.SEP_IN_MSG) 
+    #                     #node = m[0]
+    #                     node = db.split("_")[-3]
+
+    #                     size = string.atoi(m[3]) / chunk_num + 1
+    #                     if size > DATA_MAX_SIZE:
+    #                         ParaLiteLog.info("start to get data as bk: %s" % (DATA_MAX_SIZE))  
+    #                         ds = self.get_data_as_bk(DATA_MAX_SIZE)
+    #                     else:
+    #                         ParaLiteLog.info("start to get data as bk: %s" % (size))
+    #                         ds = self.get_data_as_bk(size)
+    #                     if ds is None:
+    #                         ParaLiteLog.info("really get data as bk: 0")
+    #                         break
+    #                     ParaLiteLog.info("really get data as bk: %s" % (len(ds)))
+    #                     pos = ds.rfind(row_sep)
+    #                     ParaLiteLog.info(pos)
+    #                     send_ds =  left_ds + ds[0:pos]
+    #                     left_ds = ds[pos+len(row_sep):]
+    #                     thd = threading.Thread(target=self.send_to_node,
+    #                                            args=(db, table, send_ds, node_addr[node],
+    #                                                  row_sep, col_sep, is_replace))
+    #                     thd.setDaemon(True)
+    #                     thd.start()
+    #                     thds.append(thd)
+    #                     if db in replica_info:
+    #                         for rdb in replica_info[db]:
+    #                             node = replica_info[db][rdb]
+    #                             thd = threading.Thread(target=self.send_to_node,
+    #                                                    args=(rdb, table, ds, node_addr[node],
+    #                                                          row_sep, col_sep, is_replace))
+    #                             thd.setDaemon(True)
+    #                             thd.start()
+    #                             thds.append(thd)
+    #                     i += 1
+    #             else:
+    #                 i = 0
+    #                 while True:
+    #                     db = sub_dbs[i % num_of_db]
+    #                     #m = nodes[(i % num_of_db)/chunk_num].split(conf.SEP_IN_MSG) 
+    #                     #node = m[0]
+    #                     node = db.split("_")[-3]
+    #                     size = string.atoi(m[3]) / chunk_num + 1
+    #                     if size > DATA_MAX_SIZE:
+    #                         ParaLiteLog.info("start to get data as bk: %s" % (DATA_MAX_SIZE))  
+    #                         ds = self.get_data_as_bk(DATA_MAX_SIZE)
+    #                     else:
+    #                         ParaLiteLog.info("start to get data as bk: %s" % (size))
+    #                         ds = self.get_data_as_bk(size)
+    #                     if ds is None:
+    #                         ParaLiteLog.info("really get data as bk: 0")
+    #                         break
+    #                     ParaLiteLog.info("really get data as bk: %s" % (len(ds)))
+    #                     thd = threading.Thread(target=self.send_to_node,
+    #                                            args=(db, table, ds, node_addr[node],
+    #                                                  row_sep,col_sep,
+    #                                                  is_replace))
+    #                     thd.setDaemon(True)
+    #                     thd.start()
+    #                     thds.append(thd)
+    #                     if db in replica_info:
+    #                         for rdb in replica_info[db]:
+    #                             ParaLiteLog.info(rdb)
+    #                             node = replica_info[db][rdb]
+    #                             thd = threading.Thread(target=self.send_to_node,
+    #                                                    args=(rdb, table, ds, node_addr[node],
+    #                                                          row_sep, col_sep, is_replace))
+    #                             thd.setDaemon(True)
+    #                             thd.start()
+    #                             thds.append(thd)
+    #                     i += 1
+    #                     del ds
+    #         for thd in thds:
+    #             thd.join()
+    #         ss2 = time.time()
+    #         """
+    #         sss = socket(AF_INET, SOCK_STREAM)
+    #         sss.connect(master)
+    #         msg = "%s%s%s" % (conf.REQ, conf.SEP_IN_MSG, conf.END_TAG)
+    #         sss.send("%10s%s" % (len(msg), msg))
+    #         """
+    #         sep = conf.SEP_IN_MSG
+    #         msg = "%s%s%s%s%s%s%s" % (conf.REQ, sep, conf.END_TAG, sep,
+    #                                   gethostname(), sep, client_id)
+    #         so_master.send("%10s%s" % (len(msg), msg))
+    #         ParaLiteLog.info("sending to master: %s" % (conf.END_TAG))
+    #         l = string.atoi(self.recv_bytes(so_master, 10))
+    #         reply = self.recv_bytes(so_master, l)
+    #         ParaLiteLog.info("receive from master: %s" % (reply))
+    #         assert reply == conf.END_TAG
+    #         so_master.close()
+    #         ss3 = time.time()
+    #     except Exception, e:
+    #         ParaLiteLog.debug(traceback.format_exc())
+    #         raise(Exception(traceback.format_exc()))
+           
 

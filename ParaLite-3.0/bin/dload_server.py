@@ -42,7 +42,6 @@ class cdb:
         self.size = 0
         self.table_added_record = 0
         self.table_added_size = 0
-        self.id = 0
         self.status = 1
 
     def copy(self):
@@ -51,12 +50,10 @@ class cdb:
         new_db.size = self.size
         new_db.table_added_record = self.table_added_record
         new_db.table_added_size = self.table_added_size
-        new_db.id = self.id
         new_db.status = self.status
 
 class dload:
     def __init__(self):
-        self.id = string.atoi(gethostname()[-3:])
         self.iom = ioman.mk_ioman()
         self.is_running = True
         self.table = None
@@ -286,6 +283,7 @@ class dload:
             f = open(temp_file, "wb")
             f.write(data)
             f.close()
+            ParaLiteLog.debug("DB_COL_SEP: %s" % self.db_col_sep)
             if self.db_col_sep != "|":
                 ParaLiteLog.info("LOAD: execute .separator and .import")
                 if self.cmd_col_sep is None or self.cmd_col_sep == "None":
@@ -383,14 +381,16 @@ class dload:
         ss2 = time.time()
         ParaLiteLog.info("notify_change_to_master: END")
 
-def Ws(s):
+def ws(s):
     sys.stdout.write(s+'\n')
     
-def Es(s):
+def es(s):
     sys.stderr.write(s+'\n')
  
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         argument = sys.argv[1]
     dload().start(argument)
+
+    
 

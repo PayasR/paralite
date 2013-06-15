@@ -352,12 +352,12 @@ class LogicalPlanMaker:
                 err_type, err_info = self.mk_drop_plan(parse_result)
                 
             else:
-                print 'please enter right sql'
+                es('please enter right sql\n')
             self.task.plan.show()
             return err_type, err_info
         except Exception, e:
             ParaLiteLog.info(traceback.format_exc())
-            ex = "ERROR: %s\n" % (" ".join(str(s) for s in e.args))
+            ex = "ERROR: %s\n" % (traceback.format_exc())
             return 1, ex
 
     def mk_create_plan(self, stmt):
@@ -470,7 +470,11 @@ class LogicalPlanMaker:
             # ACK to the master, it will cause errors.
             new_sql_op.dest = conf.DATA_TO_ANO_OP
             new_sql_op.id = str(string.atoi(op.id) + 1)
-            op.children = [new_sql_op]
+            #op.children = [new_sql_op]
+            new_sql_op.children = [self.task.plan]
+            self.task.plan = new_sql_op
+        else:
+            assert(0), stmt
 
         if stmt.node != '':
             N = stmt.node
@@ -603,7 +607,11 @@ class LogicalPlanMaker:
             tree.dest = None
         else:
             self.task.create_table = stmt.table[0]
-            tree, err_info, err_type = self.mk_select_plan(stmt.select, None)
+            tree, err_type, err_info = self.mk_select_plan(stmt.select, None)
+            ParaLiteLog.debug(err_info)
+            if not tree:
+                es(err_info)
+                return 1, err_info
             tree.dest = conf.DATA_TO_DB
             tree.map[conf.DEST_TABLE] = stmt.table[0]            
         self.task.plan = tree
@@ -976,7 +984,8 @@ class LogicalPlanMaker:
             #     for cc in all_cols:
             #         proj_node.output.append(str(cc))
             #         proj_node.keys.append(str(cc))
-            if column.find("*") != -1:
+            #if column.find("*") != -1:
+            if column == "*":
                 if len(column.split(".")) == 2:
                     curtbl = column.split(".")[0]
                 else:
@@ -2918,9 +2927,12 @@ class TaskManager:
                 ParaLiteLog.debug("execute operator: ERROR --> %s" %
                                   traceback.format_exc())
             pid,r_chans,w_chans,err = x
+
+            r_chans[0].flag = conf.PROCESS_STDOUT
+            r_chans[1].flag = conf.PROCESS_STDERR
             for ch in r_chans:
-                ch.flag = conf.PROCESS_OUT
                 ch.buf = cStringIO.StringIO()
+
             if pid is None:
                 ParaLiteLog.info("Failed to create process %s\n" % cmd)
                 continue
@@ -2978,9 +2990,12 @@ class TaskManager:
         except:
             ParaLiteLog.info(traceback.format_exc())
         pid,r_chans,w_chans,err = x
+
+        r_chans[0].flag = conf.PROCESS_STDOUT
+        r_chans[1].flag = conf.PROCESS_STDERR
         for ch in r_chans:
-            ch.flag = conf.PROCESS_OUT
             ch.buf = cStringIO.StringIO()
+
         #ParaLiteLog.info("pid = %s proc = %s" % (pid, op.name))
         if pid is None:
             ParaLiteLog.info("Failed to create process %s\n" % cmd)
@@ -3129,9 +3144,12 @@ class TaskManager:
                 except:
                     ParaLiteLog.info(traceback.format_exc())
                 pid,r_chans,w_chans,err = x
+
+                r_chans[0].flag = conf.PROCESS_STDOUT
+                r_chans[1].flag = conf.PROCESS_STDERR
                 for ch in r_chans:
-                    ch.flag = conf.PROCESS_OUT
                     ch.buf = cStringIO.StringIO()
+                    
                 if pid is None:
                     ws("failed to create process %s\n" % cmd)
                     """
@@ -4855,7 +4873,7 @@ class DataLoader:
         self.process = {}
         self.database = None
         self.request = []
-        self.socks = []
+        self.client_addrs = []
         self.row_sep = None # the row separator of data, NULL -- if it is \n or None
         self.userconfig = userconfig
     """
@@ -4864,12 +4882,13 @@ class DataLoader:
     # if all workers are finished (all db are changed), set the dloader instance 
     None.
     """
-    def proc_req_msg(self, node, size, sock):
-        global client_num
-        self.socks.append(sock)
+    def proc_req_msg(self, node, size, addr):
+        sep = conf.SEP_IN_MSG
+        sock = socket(AF_INET, SOCK_STREAM)
+        sock.connect(addr)
+        self.client_addrs.append(addr)
         if size == 0:
-            msg = str(client_num)
-            client_num += 1
+            msg = conf.DLOAD_REPLY
             sock.send("%10s%s" % (len(msg), msg))
             return 
         if self.fashion == conf.ROUND_ROBIN_FASHION:
@@ -4912,10 +4931,11 @@ class DataLoader:
         else:
             rs.append("")
             
-        rs.append(str(client_num))
-        client_num += 1
-        msg = "#".join(rs)
+        #rs.append(str(client_num))
+        #client_num += 1
+        msg = sep.join([conf.DLOAD_REPLY, "#".join(rs)])
         send_bytes(sock, "%10s%s" % (len(msg), msg))
+        sock.close()
 
     def proc_dbm_msg(self, node, se_db):
         self.count_dbm += 1
@@ -5052,8 +5072,11 @@ class DataLoader:
             sock.close()
 
     def notify_dload_client(self):
-        for sock in self.socks:
-            sock.send("%10s%s" % (len(conf.END_TAG), conf.END_TAG))
+        for addr in self.client_addrs:
+            sock = socket(AF_INET, SOCK_STREAM)
+            sock.connect(addr)
+            sock.send("%10s%s" % (len(conf.DLOAD_END_TAG), conf.DLOAD_END_TAG))
+            sock.close()
 
     def get_available_port(self, node):
         """get available port on the node
@@ -5099,13 +5122,12 @@ class DataLoader:
             pipes = [(None, "w", 0), (None, "r", 1), (None, "r", 2)]
             pid, r_chans, w_chans, err = self.iom.create_process(
                 cmd.split(), None, None, pipes, None)
+            r_chans[0].flag = conf.PROCESS_STDOUT
+            r_chans[1].flag = conf.PROCESS_STDERR
+            for ch in r_chans:
+                ch.buf = cStringIO.StringIO()
 
             ParaLiteLog.debug("gxpc e -h %s python %s" % (node, name))
-            if err:
-                es("ERROR: dloader is started failed: %s" % (err))
-            for ch in r_chans:
-                ch.flag = conf.PROCESS_OUT
-                ch.buf = cStringIO.StringIO()
             proc = ParaLiteProcess(
                 self.cqid, pid, "dloader", None, node, r_chans, w_chans, err)
             proc.status = 2
@@ -5181,7 +5203,9 @@ class ParaLiteMaster():
                     buf.write(all_data[ch.length+10:])
                     ch.length = 0
                     return ioman_base.event_read(ch, data_to_return, 0, ev.err)
-            
+            # else:
+            #     return ioman_base.event_read(ch, ev.data, 0, ev.err)
+
     def start(self):
         global master_port, log
         try:
@@ -5221,15 +5245,18 @@ class ParaLiteMaster():
         """
         now, it starts to wait for any event and process them
         """
-        handler = Thread(target=self.event_recv)
-        handler.setDaemon(True)
-        handler.start()
-
-        self.handle_read()
-        ParaLiteLog.info("The main thread is finished...")
-        handler.join()
-        ParaLiteLog.info("The child thread is finished...")
         
+        # handler = Thread(target=self.event_recv)
+        # handler.setDaemon(True)
+        # handler.start()
+
+        # self.handle_read()
+        # ParaLiteLog.info("The main thread is finished...")
+        # handler.join()
+        # ParaLiteLog.info("The child thread is finished...")
+        
+        self.event_recv()
+
     def event_recv(self):
         while self.is_running:
             try:
@@ -5244,7 +5271,12 @@ class ParaLiteMaster():
                     return
             elif isinstance(ev, ioman_base.event_read):
                 if ev.data != "":
-                    self.eventqueue.put(ev)
+                    if ev.ch.flag == conf.PROCESS_STDOUT or ev.ch.flag == conf.PROCESS_STDERR:
+                        self.handle_read_from_process(ev)
+                    elif ev.ch.flag == conf.SOCKET_OUT:
+                        self.handle_read_from_socket(ev)
+
+                    #self.eventqueue.put(ev)
                     if ev.data[10:] == conf.EXIT:
                         break
             elif isinstance(ev, ioman_base.event_death):
@@ -5257,10 +5289,13 @@ class ParaLiteMaster():
 
     def handle_read(self):
         while self.is_running:
+            ParaLiteLog.debug("3333333333333")
             try:
                 event = self.eventqueue.get()
+                ParaLiteLog.debug("222222222222")
                 flag = event.ch.flag
-                if flag == conf.PROCESS_OUT:
+                if flag == conf.PROCESS_STDOUT or flag == conf.PROCESS_STDERR:
+                    ParaLiteLog.debug("11111111")
                     self.handle_read_from_process(event)
                 elif flag == conf.SOCKET_OUT:
                     self.handle_read_from_socket(event)
@@ -5270,6 +5305,7 @@ class ParaLiteMaster():
                     self.is_running = False
                     self.handle_exception(self.my_exception)
             except Exception, e:
+                ParaLiteLog.debug("777777777777")
                 ParaLiteLog.debug(traceback.format_exc())
                 self.my_exception = (
                     ParaLiteException().SELF_EXCEPTION,
@@ -5277,6 +5313,7 @@ class ParaLiteMaster():
                 self.is_running = False
                 self.handle_exception(self.my_exception)
 
+        ParaLiteLog.debug("444444444444")
         # notify event_recv by sending a message
         sock = socket(AF_INET, SOCK_STREAM)
         sock.connect((master_node, master_port))
@@ -5578,11 +5615,12 @@ class ParaLiteMaster():
         event.new_ch.buf = cStringIO.StringIO()
 
     def handle_read_from_process(self, event):
-        if event.data.startswith("ERROR"):
-            ParaLiteLog.info("PROCESS: %s" % event.data)
-            self.safe_kill_master()
-            raise(Exception(event.data))            
-    
+        #if event.data.startswith("ERROR"):
+        ParaLiteLog.error("PROCESS: %s" % event.data)
+        es("%s\n" % event.data)
+        #self.safe_kill_master()
+        self.is_running = False
+        
     def handle_read_from_socket(self, event):
         """
         (1) REG for data node: 
@@ -5661,28 +5699,26 @@ class ParaLiteMaster():
                         self.dloader.notify_dload_server()
                         ParaLiteLog.info("notify all dload server")
                     return
-                #REQ:cqid:NODE:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:ROW_SEP:client_id
-                cqid = m[1]
-                node = m[2]
-                database = m[3]
-                table = m[4]
-                data_size = m[5]
-                tag = string.atoi(m[6])
+
+                #REQ:cqid:NODE:PORT:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:ROW_SEP:client_id
+                cqid, node, port, database, table, data_size, tag = m[1:8]
+                port = string.atoi(port)
                 node_info = InfoCenter().get_data_node_info(database, table)
                 if len(node_info) == 0:
                     err_info = "ERROR: %s may not exists" % table
                     self.my_exception = (ParaLiteException().SELF_EXCEPTION, err_info)
                     return
+
                 if self.dloader is None:
                     self.dloader = DataLoader(self.iom, self.userconfig)
                     self.dloader.tag = tag
-                    self.dloader.fashion = m[7]
+                    self.dloader.fashion = m[8]
                     self.dloader.n_info = node_info
                     self.dloader.table = table
                     self.dloader.cqid = cqid
                     self.dloader.database = database
                     self.dloader.row_sep = m[8] #"NULL" or Other
-                    if tag == 1:
+                    if tag == conf.LOAD_FROM_API:
                         task = self.task_manager.taskqueue[cqid]
                         for addr in self.task_manager.operator_addrs[task.plan.id]:
                             self.dloader.client[addr[1]] = addr[0]
@@ -5691,14 +5727,15 @@ class ParaLiteMaster():
                         self.dloader.client[0] = node
                     self.dloader.start()
                 if self.dloader.all_server_started():
-                    self.process_load_request(node, data_size, event.ch.so)
+                    self.process_load_request(node, data_size, (node, port))
                 else:
-                    self.dloader.request.append((node, data_size, event.ch.so))
+                    self.dloader.request.append((node, data_size, (node, port)))
             elif mt == conf.DBM:
+                ParaLiteLog.debug(message)
                 if self.process_db_modified(message) == 1:
                     self.is_running = False
             elif mt == conf.QUE:
-                self.process_db_query(message, event.ch.so)
+                self.process_db_query(message)
             else:
                 ws('we can not support this registeration\n')
                 return
@@ -5860,7 +5897,8 @@ class ParaLiteMaster():
         sock.close()
         
         #kill all related process
-        os.system("clear.sh")
+        path = WORKING_DIR
+        os.system("%sclear.sh" % path)
         ParaLiteLog.debug("executing clear.sh")
 
     def add_new_client(self, t, so, c):
@@ -6107,22 +6145,29 @@ class ParaLiteMaster():
         # else:
         #     self.data_parallel.distribute_data(wnode)
 
-    def process_db_query(self, message, client):
-        #QUE:type:database:table (1) QUE:type:database,table 
-        cmd_type = message.split(conf.SEP_IN_MSG)[1]
-        database = message.split(conf.SEP_IN_MSG)[2]
-        table = message.split(conf.SEP_IN_MSG)[3]
-        if cmd_type == "TABLE_COLUMN":
-            columns = InfoCenter().get_table_columns(database,table)
-            s = conf.SEP_IN_MSG.join(columns)
-            client.send("%10s%s" % (len(s), s))
-        elif cmd_type == "SEPARATOR":
-            sep = InfoCenter().get_separator(database)
-            s = conf.SEP_IN_MSG.join(sep)
-            client.send("%10s%s" % (len(s), s))
-        elif cmd_type == "PARTITION_KEY":
-            key = InfoCenter().get_table_partition_key(database, table)
-            client.send("%10s%s" % (len(key), key))
+    def process_db_query(self, message):
+        #QUE:node:port:database:table
+        node,port,database,table = message.split(conf.SEP_IN_MSG)[1:]
+        port = string.atoi(port)
+
+        columns = InfoCenter().get_table_columns(database,table)
+        s1 = " ".join(columns)
+
+        key = InfoCenter().get_table_partition_key(database, table)
+        if key == []:
+            s2 = "NULL"
+        else:
+            s2 = ",".join(key)
+
+        sep = InfoCenter().get_separator(database)
+        s3 = sep[0]
+        s4 = sep[1]
+
+        msg = conf.SEP_IN_MSG.join([conf.METADATA_INFO, s1, s2, s3, s4])
+        sock = socket(AF_INET, SOCK_STREAM)
+        sock.connect((node, port))
+        sock.send("%10s%s" % (len(msg), msg))
+        sock.close()
 
     def process_kal_client(self, message):
         #KAL:cqid:opid:id:status:speed:time
@@ -6192,9 +6237,9 @@ class ParaLiteMaster():
             return 1
         return 0
     
-    def process_load_request(self, node, data_size, sock):
+    def process_load_request(self, node, data_size, addr):
         try:
-            self.dloader.proc_req_msg(node, string.atoi(data_size), sock)
+            self.dloader.proc_req_msg(node, string.atoi(data_size), addr)
         except Exception, e:
             raise e
         
@@ -6209,7 +6254,8 @@ class ParaLiteMaster():
             ParaLiteLog.info('-------------import data succussfully-----------')
             tag = self.dloader.tag
             self.dloader = None
-            if tag == 0:
+            ParaLiteLog.debug(tag)
+            if tag == conf.LOAD_FROM_CMD:
                 return 1
         return 0
 
@@ -7094,7 +7140,6 @@ def main():
     m_paraLite_ins = ParaLiteMaster()
     try:
         m_paraLite_ins.start()
-        
         """
         if os.path.exists(m_paraLite_ins.userconfig.temp_dir):
             os.system("rm -rf %s" % m_paraLite_ins.userconfig.temp_dir)
@@ -7104,6 +7149,8 @@ def main():
             ParaLiteLog.info("KeyboardInterrupt")
         m_paraLite_ins.safe_kill_master()
     except Exception, e:
+        ParaLiteLog.debug(traceback.format_exc())
+        es(traceback.format_exc())
         traceback.print_exc()
         m_paraLite_ins.safe_kill_master()
 
