@@ -575,8 +575,6 @@ class ParaLite:
                     if is_end == 1:
                         f.write("\n")
                     f.close()
-        else:
-            assert(0), self.output
         
     def handle_accept(self, event):
         ch = event.new_ch
@@ -978,6 +976,7 @@ Examples:
                 # if the message comes from pipes of the child process, wait all
                 # message until a eof is found
                 ParaLiteLog.debug("Receive a message from a child process")
+                #return ioman_base.event_read(ch, ch.buf.getvalue(), 1, ev.err)
             else:
                 assert(0), ev.ch.flag
 

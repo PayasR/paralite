@@ -209,7 +209,7 @@ class dload:
                 del(data)
             except Exception, e:
                 ParaLiteLog.info(traceback.format_exc())
-                Es("ERROR: in write_to_db: %s" % (" ".join(str(s) for s in e.args)))
+                es("ERROR: in write_to_db: %s\n" % (traceback.format_exc()))
                 sys.exit(1)
                 
     def write_to_db(self, db, data, size):
@@ -237,7 +237,7 @@ class dload:
                     cr.execute(template, x)
                     record_num += 1
                 except sqlite3.OperationalError,e:
-                    Es("ERROR: sqlite3.OperationalError: %s\n" % (e.args, ))
+                    es("ERROR: sqlite3.OperationalError: %s\n" % (e.args, ))
                     ParaLiteLog.info(traceback.format_exc())
                     sys.exit(1)
             ParaLiteLog.info("record_num is %s" % (record_num))
@@ -268,7 +268,7 @@ class dload:
                     cr.execute(template, x)
                     record_num += 1
             except Exception, e:
-                Es("ERROR: in write_to_db: %s\n" % (" ".join(str(s) for s in e.args)))
+                es("ERROR: in write_to_db: %s\n" % (" ".join(str(s) for s in e.args)))
                 ParaLiteLog.info(traceback.format_exc())
                 sys.exit(1) 
             ParaLiteLog.info("record_num is %s" % (record_num))
@@ -366,7 +366,9 @@ class dload:
                         self.handle_read(ev)
                         
         except Exception, e:
-            Es("ERROR: in dload_server.py : %s" % (" ".join(str(s) for s in e.args)))
+            es(
+                "ERROR: in dload_server.py : %s\n" % (
+                    " ".join(str(s) for s in e.args)))
             ParaLiteLog.info(traceback.format_exc())
             sys.exit(1)
         for thd in self.threads:
@@ -382,10 +384,12 @@ class dload:
         ParaLiteLog.info("notify_change_to_master: END")
 
 def ws(s):
-    sys.stdout.write(s+'\n')
+    sys.stdout.write(s)
+    sys.stdout.close()
     
 def es(s):
-    sys.stderr.write(s+'\n')
+    sys.stderr.write(s)
+    sys.stderr.close()
  
 if __name__ == "__main__":
     if len(sys.argv) > 1:

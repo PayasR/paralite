@@ -27,9 +27,11 @@ from lib import ioman, ioman_base
 
 def es(s):
     sys.stderr.write(s)
+    sys.stderr.close()
 
 def ws(s):
     sys.stdout.write(s)
+    sys.stdout.close()
 
 
 def get_max_size():

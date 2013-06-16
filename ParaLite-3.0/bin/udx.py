@@ -28,9 +28,11 @@ DATA_MAX_SIZE = 1024*1024*1024*2  # 2GB
 
 def ws(s):
     sys.stdout.write(s)
+    sys.stdout.close()
     
 def es(s):
     sys.stderr.write(s)
+    sys.stderr.close()
 
 def recv_bytes(so, n):
     A = []

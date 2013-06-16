@@ -36,6 +36,7 @@ def ws(s):
     
 def es(s):
     sys.stderr.write(s)
+    sys.stderr.close()
 
 try:
     client_num = 0
@@ -3208,6 +3209,9 @@ class TaskManager:
             temp_task.query = sql
             if self.parse_task(temp_task):
                 ret = temp_task.plan.get()
+        else:
+            assert(0), t.type
+            
         for addr in t.reply_sock:
             sock = socket(AF_INET,SOCK_STREAM)
             sock.connect(addr)
@@ -6883,6 +6887,8 @@ class ParaLiteMaster():
                     spec_task.type = spec_task.SHOW
                 elif cq.startswith(".analyze"):
                     spec_task.type = spec_task.ANALYZE
+                else:
+                    es("Error: ParaLite cannot support the query\n")
                 spec_task.id = str(get_unique_num(1, 2000))
                 return spec_task, nodename
             else:
