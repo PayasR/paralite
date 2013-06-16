@@ -525,6 +525,8 @@ class LogicalPlanMaker:
             return -1, None
         InfoCenter().insert_table_info(self.task.database, table_name, column,
                                        nodes, chunk_num, replica_num, key)
+        # for ".schema" command
+        InfoCenter().insert_schema_info(self.task.database, table_name,self.sql)
         return -1, None
     
     def get_available_node(self, nodes):
@@ -3209,6 +3211,9 @@ class TaskManager:
             temp_task.query = sql
             if self.parse_task(temp_task):
                 ret = temp_task.plan.get()
+        # for ".schema" command
+        elif t.type == t.SCHEMA:
+            ret = InfoCenter().get_schema_info(t.database)
         else:
             assert(0), t.type
             
@@ -3219,7 +3224,7 @@ class TaskManager:
             sock.send("%10s%s" % (len(ret), ret))
             sock.close()
 
-    def execute(self): 
+    def execute(self):
         task = self.queue.get()
         if isinstance(task, Task):
             ParaLiteLog.debug("parse task : START")
@@ -3970,6 +3975,7 @@ class InfoCenter:
         (6) table_partition_info: |name|partition_num|partition_key|
         (7) sub_db_info:       |node|db_name|db_size|status|
         (8) db_replica_info:   |db_name|db_replica_name|node|
+        (9) schema_info: |tbl_name|sql|
         """
         cr = conn.cursor()
         tsql = 'select * from sqlite_master where type="table" and name="%s"' % (
@@ -4044,6 +4050,15 @@ class InfoCenter:
         rs = cr.fetchall()
         if len(rs) == 0:
             csql = "create table db_replica_info(db_name varchar(50), db_replica_name varchar(50), node varchar(50))"
+            cr.execute(csql)
+            conn.commit()
+        # for ".schema" command
+        tsql = 'select * from sqlite_master where type="table" and name="%s"' % (
+            conf.DB_SCHEMA_INFO)
+        cr.execute(tsql)
+        rs = cr.fetchall()
+        if len(rs) == 0:
+            csql = "create table db_schema_info(tbl_name varchar(50), sql text)"
             cr.execute(csql)
             conn.commit()
 
@@ -4303,6 +4318,21 @@ class InfoCenter:
                 tables.append(row[0])
         conn.close()
         return "\n".join(tables)
+    
+    # for ".schema" command 
+    def get_schema_info(self,database):
+        conn = sqlite3.connect(database)
+        c = conn.cursor()
+        sql = "select sql from db_schema_info" 
+        c.execute(sql)
+        rs = c.fetchall()
+        schemas = []
+        if rs:
+            for row in rs:
+                schemas.append(row[0])
+        conn.close()
+        return "\n".join(schemas)
+
     """
     Table: data_pos_info   |database_name|table_name|partition_num|partition_key|
     """
@@ -4476,6 +4506,21 @@ class InfoCenter:
         cr.execute(sqldelete)
         conn.commit()
         cr.close()
+
+    # invoked when table is created
+    # for ".schema" commands
+    def insert_schema_info(self,database,table, sql):
+        conn = sqlite3.connect(database)
+        cr = conn.cursor()
+        sql1 = "select * from db_schema_info where tbl_name='%s'" % (table)
+        rs = cr.execute(sql1).fetchall()
+        if len(rs) == 0:
+            sql = sql.replace("table","TABLE")
+            sql = sql.replace("create","CREATE")
+            sql2 = 'insert into db_schema_info(tbl_name,sql) values("%s","%s")' % (table,sql)
+            cr.execute(sql2)
+            conn.commit()
+        conn.close()
 
     # invoked when table is created
     def insert_table_info(self, database, table, column, nodes, chunk_num, replica_num, hash_key):
@@ -4726,7 +4771,7 @@ class SpecialTask:
     COL_SEPARATOR = ".col_separator"
     SHOW = ".show"
     ANALYZE = ".analyze"
-
+    SCHEMA = ".schema"
     def __init__(self):
         self.cmd = None
         self.type = None
@@ -5940,13 +5985,13 @@ class ParaLiteMaster():
         self.check_metadata_table(metadata_db)
         reply_so = (message.split(conf.SEP_IN_MSG)[4],
                     string.atoi(message.split(conf.SEP_IN_MSG)[5]))
-        
         t, clientname = self.parse_query_args(message)
         if t:
             if self.output is None:
                 self.output = InfoCenter().get_output(metadata_db)
             (row_sep, col_sep) = InfoCenter().get_separator(metadata_db)
             msg = "%s%s%s%s%s%s%s" % (conf.DB_INFO, conf.SEP_IN_MSG, self.output,conf.SEP_IN_MSG, row_sep, conf.SEP_IN_MSG, col_sep)
+
             try:
                 sock = socket(AF_INET, SOCK_STREAM)
                 sock.connect(reply_so)
@@ -6887,6 +6932,8 @@ class ParaLiteMaster():
                     spec_task.type = spec_task.SHOW
                 elif cq.startswith(".analyze"):
                     spec_task.type = spec_task.ANALYZE
+                elif cq.startswith(".schema"):
+                    spec_task.type = spec_task.SCHEMA
                 else:
                     es("Error: ParaLite cannot support the query\n")
                 spec_task.id = str(get_unique_num(1, 2000))
