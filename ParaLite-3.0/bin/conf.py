@@ -128,7 +128,7 @@ TABLE_POS_INFO = "table_pos_info"
 TABLE_PARTITION_INFO = "table_partition_info"
 SUB_DB_INFO = "sub_db_info"
 DB_REPLICA_INFO = "db_replica_info"
-
+DB_SCHEMA_INFO = "db_schema_info"
 # result data's destination
 DATA_TO_ANO_OP = "piplining data"
 DATA_TO_CLIENTS = "distribute data to clients"
