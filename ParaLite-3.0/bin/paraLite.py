@@ -191,7 +191,7 @@ class ParaLite:
         self.db_row_sep = None
         self.db_col_sep = None
         self.opt = ImportCmd()
-        
+        self.ch_to_master = None
         
     def init_default_configs(self):
         dic = {}
@@ -332,8 +332,6 @@ class ParaLite:
         for f in opt.files:
             total_size += os.path.getsize(f)
 
-        so_master = socket(AF_INET, SOCK_STREAM)
-        so_master.connect((master_node, master_port))
         #REQ:cqid:NODE:PORT:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:row_sep
         if opt.row_sep is None or opt.row_sep == "\n":
             temp_sep = "NULL"
@@ -348,8 +346,7 @@ class ParaLite:
                         opt.table, str(total_size), str(tag), opt.fashion, 
                         temp_sep, str(client_id)])
 
-        so_master.send("%10s%s" % (len(msg), msg))
-        so_master.close()
+        self.ch_to_master.request_write("%10s%s" % (len(msg), msg))
         ParaLiteLog.info("send a request to the master")
         
     def parse(self, argv):
@@ -642,6 +639,14 @@ class ParaLite:
             assert len(m) == 2
             if m[1] != conf.MASTER_READY:
                 self.master_port = string.atoi(m[1])
+
+            # create a channel to the master
+            sock_to_master = socket(AF_INET, SOCK_STREAM)
+            sock_to_master.connect((self.master_node, self.master_port))
+            self.ch_to_master = self.iom.add_socket(sock_to_master)
+            self.ch_to_master.buf = cStringIO.StringIO()
+            self.ch_to_master.flag = conf.CH_TO_MASTER
+
             if tag == "sql":
                 self.set_master_info(self.master_port)
                 ParaLiteLog.debug("set_master_info: FINISH")
@@ -653,15 +658,11 @@ class ParaLite:
             elif tag == "import":
                 self.is_local_server_running = False
                 # send metadata query to the master
-                addr = (self.master_node, self.master_port)
-                sock = socket(AF_INET, SOCK_STREAM)
-                sock.connect(addr)
                 table = self.ctquery.split()[2]
                 my_node = gethostname()
                 msg = sep.join(
                     [conf.QUE, my_node, str(self.my_port), self.database, table])
-                sock.send("%10s%s" % (len(msg), msg))
-                sock.close()
+                self.ch_to_master.request_write("%10s%s" % (len(msg), msg))
 
             elif tag == "special":
                 self.register_to_master(
@@ -705,10 +706,7 @@ class ParaLite:
             # send END_TAG to the master
             client_id = "0"
             msg = sep.join([conf.REQ, conf.END_TAG, gethostname(), client_id])
-            so_master = socket(AF_INET, SOCK_STREAM)
-            so_master.connect((self.master_node, self.master_port))
-            so_master.send("%10s%s" % (len(msg), msg))
-            so_master.close()
+            self.ch_to_master.request_write("%10s%s" % (len(msg), msg))
             ParaLiteLog.debug("sending to master: %s" % (conf.END_TAG))
             ParaLiteLog.debug("----- dload client finish -------")
 
@@ -723,10 +721,7 @@ class ParaLite:
     def safe_kill_master(self, node, port):
         ParaLiteLog.debug("start to kill the master process safely")
         # send a KILL singal to the master and wait it to terminate
-        sock = socket(AF_INET, SOCK_STREAM)
-        sock.connect((node, port))
-        sock.send("%10s%s" % (len(conf.KILL), conf.KILL))
-        sock.close()
+        self.ch_to_master.request_write("%10s%s" % (len(conf.KILL), conf.KILL))
         
     def set_master_info(self, master_port):
         if self.hub[0] == 0:
@@ -802,8 +797,13 @@ class ParaLite:
                 elif isinstance(ev, ioman_base.event_read):
                     if ev.data != "":
                         self.handle_read(ev, action)
+                    else:
+                        if ev.ch.flag == conf.CH_TO_MASTER:
+                            self.is_running = False
                 elif isinstance(ev, ioman_base.event_death):
                     self.handle_death(ev)
+                elif isinstance(ev, ioman_base.event_write):
+                    ParaLiteLog.debug("receive a write event")
                 else:
                     assert(0), ev
             
@@ -852,19 +852,11 @@ Examples:
         print u
 
     def register_to_master(self, node, port, database, ctquery):
+        
         sep = conf.SEP_IN_MSG
-        msg = '%s%s%s%s%s%s%s%s%s%s%s' % (conf.REG,sep, conf.CLIENT, sep, database,sep,
-                                          ctquery,sep, gethostname(), sep, self.my_port)
-        addr = (node, port)
-        sock = socket(AF_INET, SOCK_STREAM)
-        try:
-            sock.connect(addr)
-        except Exception, e:
-            ParaLiteLog.error("Error in register_to_master: %s" % (" ".join(str(s) for s in e.args)))
-            print "Error in register_to_master: %s" % (" ".join(str(s) for s in e.args))
-                
-        sock.send('%10s%s' % (len(msg), msg))
-        sock.close()
+        msg = sep.join([conf.REG, conf.CLIENT, database,
+                       ctquery, gethostname(), str(self.my_port)])
+        self.ch_to_master.request_write('%10s%s' % (len(msg), msg))
             
     def get_token(self, hub):
         token = 0

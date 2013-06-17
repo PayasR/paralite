@@ -179,10 +179,11 @@ SINGLE_BUFFER = "single buffer"
 MULTI_BUFFER = "multi buffers"
 MULTI_FILE = "multi files"
 
-# output from process or socket
+# type of channels
 SOCKET_OUT = "output from socket"
 PROCESS_STDOUT = "standard output from process"
 PROCESS_STDERR = "standard error from process"
+CH_TO_MASTER = "a channel for sending data to the master"
 
 # join type
 JOIN = "join"

@@ -5252,8 +5252,13 @@ class ParaLiteMaster():
                     buf.write(all_data[ch.length+10:])
                     ch.length = 0
                     return ioman_base.event_read(ch, data_to_return, 0, ev.err)
-            # else:
-            #     return ioman_base.event_read(ch, ev.data, 0, ev.err)
+            elif ev.ch.flag == conf.PROCESS_STDOUT or ev.ch.flag == conf.PROCESS_STDERR:
+                # if the message comes from pipes of the child process, wait all
+                # message until a eof is found
+                ParaLiteLog.debug("Receive a message from a child process")
+                #return ioman_base.event_read(ch, ch.buf.getvalue(), 1, ev.err)
+            else:
+                assert(0), ev.ch.flag
 
     def start(self):
         global master_port, log
@@ -5303,7 +5308,7 @@ class ParaLiteMaster():
         # ParaLiteLog.info("The main thread is finished...")
         # handler.join()
         # ParaLiteLog.info("The child thread is finished...")
-        
+
         self.event_recv()
 
     def event_recv(self):
@@ -5328,23 +5333,25 @@ class ParaLiteMaster():
                     #self.eventqueue.put(ev)
                     if ev.data[10:] == conf.EXIT:
                         break
+
             elif isinstance(ev, ioman_base.event_death):
                 try:
                     self.handle_death(ev)
                 except Exception, e:
                     es("ERROR in handle_death: %s\n" % traceback.format_exc())
                     return
+            elif isinstance(ev, ioman_base.event_write):
+                ParaLiteLog.debug("receive a write event")
+            else:
+                assert(0), ev
         
 
     def handle_read(self):
         while self.is_running:
-            ParaLiteLog.debug("3333333333333")
             try:
                 event = self.eventqueue.get()
-                ParaLiteLog.debug("222222222222")
                 flag = event.ch.flag
                 if flag == conf.PROCESS_STDOUT or flag == conf.PROCESS_STDERR:
-                    ParaLiteLog.debug("11111111")
                     self.handle_read_from_process(event)
                 elif flag == conf.SOCKET_OUT:
                     self.handle_read_from_socket(event)
@@ -5354,7 +5361,6 @@ class ParaLiteMaster():
                     self.is_running = False
                     self.handle_exception(self.my_exception)
             except Exception, e:
-                ParaLiteLog.debug("777777777777")
                 ParaLiteLog.debug(traceback.format_exc())
                 self.my_exception = (
                     ParaLiteException().SELF_EXCEPTION,
@@ -5362,7 +5368,6 @@ class ParaLiteMaster():
                 self.is_running = False
                 self.handle_exception(self.my_exception)
 
-        ParaLiteLog.debug("444444444444")
         # notify event_recv by sending a message
         sock = socket(AF_INET, SOCK_STREAM)
         sock.connect((master_node, master_port))
