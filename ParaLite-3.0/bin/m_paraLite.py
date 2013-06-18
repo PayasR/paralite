@@ -4936,10 +4936,6 @@ class DataLoader:
         sock = socket(AF_INET, SOCK_STREAM)
         sock.connect(addr)
         self.client_addrs.append(addr)
-        if size == 0:
-            msg = conf.DLOAD_REPLY
-            sock.send("%10s%s" % (len(msg), msg))
-            return 
         if self.fashion == conf.ROUND_ROBIN_FASHION:
             nodes = []
             s = size/len(self.n_info) + 1
