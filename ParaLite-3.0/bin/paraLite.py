@@ -350,7 +350,7 @@ class ParaLite:
         ParaLiteLog.info("send a request to the master")
         
     def parse(self, argv):
-        if len(argv) == 2 and argv[1].lower() == "help":
+        if len(argv) == 2 and (argv[1].lower() == "help" or argv[1].lower() == "--help"):
             self.args = ["help"]
             return
         

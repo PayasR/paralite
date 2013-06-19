@@ -238,7 +238,6 @@ class dload_client:
                 assert reply == conf.END_TAG
                 so_master.close()
                 
-
             ParaLiteLog.info("receive the information from the master %s" % mm)
             nodes = mm[0].split(",")
             sub_dbs = mm[1].split(",")
