@@ -106,6 +106,12 @@ JOB_STATUS_INFO = 'job_status_info'
 LOAD_FROM_CMD = "load from cmd"
 LOAD_FROM_API = "load from api"
 
+# error type
+CHILD_ERROR = "Child Process ERROR:"
+MASTER_ERROR = "ParaLite Master ERROR:"
+CHILD_OUTPUT = "Child Process OUTPUT:"
+MASTER_OUTPUT = "ParaLite Master OUTPUT:"
+
 # columns type
 STRING = 'VARCHAR'
 INT = 'INTEGER'

@@ -32,11 +32,10 @@ from lib.logger import ParaLiteLog
 import conf
 
 def ws(s):
-    sys.stdout.write(s)
+    sys.stdout.write("%s%s\n" % (conf.MASTER_OUTPUT, s))
     
 def es(s):
-    sys.stderr.write(s)
-    sys.stderr.close()
+    sys.stderr.write("%s%s\n" % (conf.MASTER_ERROR, s))
 
 try:
     client_num = 0
@@ -5252,7 +5251,10 @@ class ParaLiteMaster():
                 # if the message comes from pipes of the child process, wait all
                 # message until a eof is found
                 ParaLiteLog.debug("Receive a message from a child process")
-                #return ioman_base.event_read(ch, ch.buf.getvalue(), 1, ev.err)
+                if ev.data.startswith(conf.CHILD_ERROR):
+                    data_to_return = buf.getvalue()
+                    buf.truncate(0)
+                    return ioman_base.event_read(ch, data_to_return, 0, ev.err)
             else:
                 assert(0), ev.ch.flag
 
@@ -5311,36 +5313,29 @@ class ParaLiteMaster():
         while self.is_running:
             try:
                 ev = self.next_event(None)
-            except Exception, e:
-                es("ERROR in next_event : %s\n" % (" ".join(str(s) for s in e.args)))
-            if isinstance(ev, ioman_base.event_accept):
-                try:
+                if isinstance(ev, ioman_base.event_accept):
                     self.handle_accept(ev)
-                except Exception, e:
-                    es("ERROR in handle_accept: %s\n" % (e.args[1]))
-                    return
-            elif isinstance(ev, ioman_base.event_read):
-                if ev.data != "":
-                    if ev.ch.flag == conf.PROCESS_STDOUT or ev.ch.flag == conf.PROCESS_STDERR:
-                        self.handle_read_from_process(ev)
-                    elif ev.ch.flag == conf.SOCKET_OUT:
-                        self.handle_read_from_socket(ev)
+                elif isinstance(ev, ioman_base.event_read):
+                    if ev.data != "":
+                        if ev.ch.flag == conf.PROCESS_STDOUT or ev.ch.flag == conf.PROCESS_STDERR:
+                            self.handle_read_from_process(ev)
+                        elif ev.ch.flag == conf.SOCKET_OUT:
+                            self.handle_read_from_socket(ev)
+                        else:
+                            assert(0), ev
 
-                    #self.eventqueue.put(ev)
-                    if ev.data[10:] == conf.EXIT:
-                        break
-
-            elif isinstance(ev, ioman_base.event_death):
-                try:
+                        #self.eventqueue.put(ev)
+                        if ev.data[10:] == conf.EXIT:
+                            break
+                elif isinstance(ev, ioman_base.event_death):
                     self.handle_death(ev)
-                except Exception, e:
-                    es("ERROR in handle_death: %s\n" % traceback.format_exc())
-                    return
-            elif isinstance(ev, ioman_base.event_write):
-                ParaLiteLog.debug("receive a write event")
-            else:
-                assert(0), ev
-        
+                elif isinstance(ev, ioman_base.event_write):
+                    ParaLiteLog.debug("receive a write event")
+                else:
+                    assert(0), ev
+            except Exception, e:
+                es(traceback.format_exc())
+                return
 
     def handle_read(self):
         while self.is_running:
@@ -5667,7 +5662,7 @@ class ParaLiteMaster():
     def handle_read_from_process(self, event):
         #if event.data.startswith("ERROR"):
         ParaLiteLog.error("PROCESS: %s" % event.data)
-        es("%s\n" % event.data)
+        es(event.data)
         #self.safe_kill_master()
         self.is_running = False
         
@@ -6289,6 +6284,10 @@ class ParaLiteMaster():
     
     def process_load_request(self, node, data_size, addr):
         try:
+            # check the data size
+            if data_size == 0:
+                msg = conf.DLOAD_REPLY
+                self.ch_to_master.request_write("%10s%s" % (len(msg), msg))
             self.dloader.proc_req_msg(node, string.atoi(data_size), addr)
         except Exception, e:
             raise e

@@ -24,12 +24,10 @@ from lib.logger import ParaLiteLog
 from lib import ioman, ioman_base
 
 def es(s):
-    sys.stderr.write(s)
-    sys.stderr.close()
+    sys.stderr.write("%s%s\n" % (conf.CHILD_ERROR, s))
 
 def ws(s):
-    sys.stdout.write(s)
-    sys.stdout.close()
+    sys.stdout.write("%s%s\n" % (conf.CHILD_OUTPUT, s))
 
 def get_max_size():
     """get the free memory size
@@ -589,9 +587,10 @@ class GroupbyOp:
         for i in self.result:
             for csio in self.result[i]:
                 d = string.strip(csio.getvalue())
+                if len(d) == 0:
+                    continue
                 whole_data.write(d)
-                if d != "":
-                    whole_data.write("\n")
+                whole_data.write("\n")
                 del csio
             
         if self.distinct or self.limit != -1:
@@ -823,10 +822,12 @@ class GroupbyOp:
                 reply = sep.join(m[1:])
                 ParaLiteLog.info("receive the information from the master")
                 ParaLiteLog.debug(reply)
-                dload_client.dload_client().load_internal_buffer(
-                    reply, self.dest_table, self.data, self.fashion, 
-                    self.hash_key, self.hash_key_pos, self.db_col_sep, 
-                    self.db_row_sep, self.db_col_sep, False, "0", self.log_dir)
+                
+                if len(self.data.getvalue()) != 0:
+                    dload_client.dload_client().load_internal_buffer(
+                        reply, self.dest_table, self.data, self.fashion, 
+                        self.hash_key, self.hash_key_pos, self.db_col_sep, 
+                        self.db_row_sep, self.db_col_sep, False, "0", self.log_dir)
 
                 # send END_TAG to the master
                 client_id = "0"
@@ -863,7 +864,7 @@ class GroupbyOp:
                     self.recovery_data(self.replica_result, replica_node)
 
         except Exception, e:
-            es("ERROR: in groupby.py : %s" % traceback.format_exc())
+            es("in groupby.py : %s" % traceback.format_exc())
             ParaLiteLog.info(traceback.format_exc())
             self.is_running = False
             self.no_error = False

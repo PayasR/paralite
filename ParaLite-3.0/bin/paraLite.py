@@ -41,6 +41,7 @@ class ImportCmd:
         self.col_sep = None
         self.row_sep = None
         self.files = []
+        self.file_size = 0
         self.key_pos = []
         self.record_tag = None
         self.replace = False
@@ -331,6 +332,7 @@ class ParaLite:
         total_size = 0
         for f in opt.files:
             total_size += os.path.getsize(f)
+        opt.file_size = total_size
 
         #REQ:cqid:NODE:PORT:DATABASE:TABLE:DATA_SIZE:TAG:FASHION:row_sep
         if opt.row_sep is None or opt.row_sep == "\n":
@@ -700,8 +702,10 @@ class ParaLite:
         elif message.startswith(conf.DLOAD_REPLY):
             reply = sep.join(message.split(sep)[1:])
             ParaLiteLog.info("receive the information from the master")
-            dload_client.dload_client().load_internal_file(
-                reply, self.opt, self.db_col_sep, self.defaultconf[conf.LOG_DIR])
+            ParaLiteLog.debug("------------dload client start-----------")
+            if self.opt.file_size != 0:
+                dload_client.dload_client().load_internal_file(
+                    reply, self.opt, self.db_col_sep, self.defaultconf[conf.LOG_DIR])
 
             # send END_TAG to the master
             client_id = "0"
@@ -965,10 +969,11 @@ Examples:
                     ev.ch.so.send("OK")
                     return ioman_base.event_read(ch, data_to_return, 0, ev.err)
             elif ev.ch.flag == conf.PROCESS_STDOUT or ev.ch.flag == conf.PROCESS_STDERR:
-                # if the message comes from pipes of the child process, wait all
-                # message until a eof is found
                 ParaLiteLog.debug("Receive a message from a child process")
-                #return ioman_base.event_read(ch, ch.buf.getvalue(), 1, ev.err)
+                if ev.data.startswith(conf.MASTER_ERROR):
+                    data_to_return = ch.buf.getvalue()
+                    ch.buf.truncate(0)
+                    return ioman_base.event_read(ch, data_to_return, 0, ev.err)
             else:
                 assert(0), ev.ch.flag
 

@@ -26,13 +26,11 @@ from lib import ioman, ioman_base
 # the maximum data which can be stored in memory
 DATA_MAX_SIZE = 1024*1024*1024*2  # 2GB
 
-def ws(s):
-    sys.stdout.write(s)
-    sys.stdout.close()
-    
 def es(s):
-    sys.stderr.write(s)
-    sys.stderr.close()
+    sys.stderr.write("%s%s\n" % (conf.CHILD_ERROR, s))
+
+def ws(s):
+    sys.stdout.write("%s%s\n" % (conf.CHILD_OUTPUT, s))
 
 def recv_bytes(so, n):
     A = []
@@ -1056,10 +1054,12 @@ class UDXOp:
                 reply = msg_sep.join(m[1:])
                 ParaLiteLog.info("receive the information from the master")
                 ParaLiteLog.debug(reply)
-                dload_client.dload_client().load_internal_buffer(
-                    reply, self.dest_table, self.data, self.fashion, 
-                    self.hash_key, self.hash_key_pos, self.db_col_sep, 
-                    self.db_row_sep, self.db_col_sep, False, "0", self.log_dir)
+
+                if len(self.data.getvalue()) != 0:
+                    dload_client.dload_client().load_internal_buffer(
+                        reply, self.dest_table, self.data, self.fashion, 
+                        self.hash_key, self.hash_key_pos, self.db_col_sep, 
+                        self.db_row_sep, self.db_col_sep, False, "0", self.log_dir)
 
                 # send END_TAG to the master
                 client_id = "0"
@@ -1086,7 +1086,7 @@ class UDXOp:
                 ParaLiteLog.debug(message)
                 self.is_running = False
         except Exception, e:
-            es("ERROR: %s" % traceback.format_exc())
+            es(traceback.format_exc())
             ParaLiteLog.info(traceback.format_exc())
             self.is_running = False
             self.no_error = False

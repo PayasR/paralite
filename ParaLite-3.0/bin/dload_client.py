@@ -226,18 +226,6 @@ class dload_client:
             replica_info: db_1_1 db_1_1_r_1 node1 , db_1_2 db_1_2_r_1 node2 , ...
             """
             mm = reply.split("#")
-            if total_size == 0:
-                sep = conf.SEP_IN_MSG
-                msg = "%s%s%s%s%s%s%s" % (conf.REQ, sep, conf.END_TAG, sep,
-                                          gethostname(), sep, client_id)
-                so_master.send("%10s%s" % (len(msg), msg))
-                ParaLiteLog.info("sending to master: %s" % (conf.END_TAG))
-                l = string.atoi(self.recv_bytes(so_master, 10))
-                reply = self.recv_bytes(so_master, l)
-                ParaLiteLog.info("receive from master: %s" % (reply))
-                assert reply == conf.END_TAG
-                so_master.close()
-                
             ParaLiteLog.info("receive the information from the master %s" % mm)
             nodes = mm[0].split(",")
             sub_dbs = mm[1].split(",")

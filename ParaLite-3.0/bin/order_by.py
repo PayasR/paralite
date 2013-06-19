@@ -22,12 +22,10 @@ from lib.logger import ParaLiteLog
 from lib import ioman, ioman_base
 
 def es(s):
-    sys.stderr.write(s)
-    sys.stderr.close()
+    sys.stderr.write("%s%s\n" % (conf.CHILD_ERROR, s))
 
 def ws(s):
-    sys.stdout.write(s)
-    sys.stdout.close()
+    sys.stdout.write("%s%s\n" % (conf.CHILD_OUTPUT, s))
 
 def get_max_size():
     """get the free memory size
@@ -305,6 +303,8 @@ class OrderbyOp:
         for i in self.result:
             for csio in self.result[i]:
                 d = string.strip(csio.getvalue())
+                if len(d) == 0:
+                    continue
                 whole_data.write(d)
                 whole_data.write("\n")
                 del csio
@@ -337,16 +337,28 @@ class OrderbyOp:
             sock.close()
 
         elif self.dest == conf.DATA_TO_DB:
+            self.data = data
             col_sep = self.db_col_sep
             row_sep = self.db_row_sep
             master = (self.master_name, self.master_port)
-            ParaLiteLog.info("Load data start:")
-            dload_client.dload_client().load_internal(
-                master, self.cqid, gethostname(),self.dest_db,
-                self.dest_table, data, 1, self.fashion,
-                self.hash_key, self.hash_key_pos, col_sep,
-                row_sep, col_sep, False, "0", LOG_DIR)
-            ParaLiteLog.info("Load data finish")
+
+            ParaLiteLog.info("proc_select: load data start")
+            # send request to the master
+            t_size = len(data.getvalue())
+            sep = conf.SEP_IN_MSG
+            tag = conf.LOAD_FROM_API
+            if row_sep is None or row_sep == "\n":
+                temp_sep = "NULL"
+            else:
+                temp_sep = row_sep
+            msg = sep.join(
+                str(s) for s in [conf.REQ, self.cqid, gethostname(), 
+                                 self.my_port, self.dest_db, self.dest_table,
+                                 t_size, tag, self.fashion, temp_sep, "0"])
+            so_master = socket(AF_INET, SOCK_STREAM)
+            so_master.connect(master)
+            so_master.send("%10s%s" % (len(msg),msg))
+            so_master.close()
 
     def start(self):
         try:
@@ -451,17 +463,46 @@ class OrderbyOp:
                 self.send_rs_info_to_master(self.total_size, self.total_time)
                 
                 # distribute data
-                if self.dest == conf.DATA_TO_DB or self.dest == conf.DATA_TO_ONE_CLIENT:
+                if self.dest == conf.DATA_TO_ONE_CLIENT:
                     ParaLiteLog.debug("dest = %s" % self.dest)                    
                     self.distribute_data()
                     self.send_status_to_master(self.cur_jobid, conf.ACK)
                     self.is_running = False
+                elif self.dest == conf.DATA_TO_DB:
+                    self.distribute_data()
 
             elif m[0] == conf.DATA_PERSIST:
                 # if the data is requried to be persisted or not
                 if m[1] == conf.CHECKPOINT:
                     self.write_data_to_disk()
 
+            elif m[0] == conf.DLOAD_REPLY:
+                sep = conf.SEP_IN_MSG
+                reply = sep.join(m[1:])
+                ParaLiteLog.info("receive the information from the master")
+                ParaLiteLog.debug(reply)
+                
+                if len(self.data.getvalue()) != 0:
+                    dload_client.dload_client().load_internal_buffer(
+                        reply, self.dest_table, self.data, self.fashion, 
+                        self.hash_key, self.hash_key_pos, self.db_col_sep, 
+                        self.db_row_sep, self.db_col_sep, False, "0", self.log_dir)
+
+                # send END_TAG to the master
+                client_id = "0"
+                msg = sep.join([conf.REQ, conf.END_TAG, gethostname(), client_id])
+                so_master = socket(AF_INET, SOCK_STREAM)
+                so_master.connect((self.master_name, self.master_port))
+                so_master.send("%10s%s" % (len(msg), msg))
+                so_master.close()
+                ParaLiteLog.debug("sending to master: %s" % (conf.END_TAG))
+                ParaLiteLog.debug("----- dload client finish -------")
+
+            elif message == conf.DLOAD_END_TAG:
+                ParaLiteLog.debug("---------import finish---------")
+                self.send_status_to_master(" ".join(self.cur_jobid), conf.ACK)
+                self.is_running = False
+                    
             elif m[0] == conf.EXIT:
                 self.is_running = False
 
@@ -477,7 +518,7 @@ class OrderbyOp:
 
 
         except Exception, e:
-            es("ERROR: %s" % traceback.format_exc())
+            es(traceback.format_exc())
             ParaLiteLog.info(traceback.format_exc())
             self.is_running = False
             self.no_error = False

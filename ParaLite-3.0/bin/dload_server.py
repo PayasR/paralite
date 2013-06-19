@@ -22,6 +22,12 @@ import conf
 
 DB_SIZE_LIMITATION = 20*1024*1024*1024 # 20GB
 
+def es(s):
+    sys.stderr.write("%s%s\n" % (conf.CHILD_ERROR, s))
+
+def ws(s):
+    sys.stdout.write("%s%s\n" % (conf.CHILD_OUTPUT, s))
+
 """
 I tested three methods for data loading: 1g
 (1) executemany : 77s/116s
@@ -209,7 +215,7 @@ class dload:
                 del(data)
             except Exception, e:
                 ParaLiteLog.info(traceback.format_exc())
-                es("ERROR: in write_to_db: %s\n" % (traceback.format_exc()))
+                es("in write_to_db: %s" % (traceback.format_exc()))
                 sys.exit(1)
                 
     def write_to_db(self, db, data, size):
@@ -237,7 +243,7 @@ class dload:
                     cr.execute(template, x)
                     record_num += 1
                 except sqlite3.OperationalError,e:
-                    es("ERROR: sqlite3.OperationalError: %s\n" % (e.args, ))
+                    es("sqlite3.OperationalError: %s" % traceback.format_exc())
                     ParaLiteLog.info(traceback.format_exc())
                     sys.exit(1)
             ParaLiteLog.info("record_num is %s" % (record_num))
@@ -268,7 +274,7 @@ class dload:
                     cr.execute(template, x)
                     record_num += 1
             except Exception, e:
-                es("ERROR: in write_to_db: %s\n" % (" ".join(str(s) for s in e.args)))
+                es("in write_to_db: %s" % (traceback.format_exc()))
                 ParaLiteLog.info(traceback.format_exc())
                 sys.exit(1) 
             ParaLiteLog.info("record_num is %s" % (record_num))
@@ -366,9 +372,7 @@ class dload:
                         self.handle_read(ev)
                         
         except Exception, e:
-            es(
-                "ERROR: in dload_server.py : %s\n" % (
-                    " ".join(str(s) for s in e.args)))
+            es("in dload_server.py : %s" % traceback.format_exc())
             ParaLiteLog.info(traceback.format_exc())
             sys.exit(1)
         for thd in self.threads:
@@ -383,14 +387,6 @@ class dload:
         ss2 = time.time()
         ParaLiteLog.info("notify_change_to_master: END")
 
-def ws(s):
-    sys.stdout.write(s)
-    sys.stdout.close()
-    
-def es(s):
-    sys.stderr.write(s)
-    sys.stderr.close()
- 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         argument = sys.argv[1]
