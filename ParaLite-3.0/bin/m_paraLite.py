@@ -988,16 +988,15 @@ class LogicalPlanMaker:
             #         proj_node.keys.append(str(cc))
             #if column.find("*") != -1:
             if column == "*":
-                if len(column.split(".")) == 2:
-                    curtbl = column.split(".")[0]
-                else:
+                if self.task.table is not None:
                     curtbl = self.task.table
-                if curtbl is None:
-                    return None, 1, "Please specify the table for the columns"
+                else:
+                    return -1, None, "Please check the syntax: * on a single table"
                 all_cols = InfoCenter().get_table_columns(metadata_db, curtbl)
                 for cc in all_cols:
-                    proj_node.output.append("%s.%s" % (curtbl, cc))
-                    proj_node.keys.append("%s.%s" % (curtbl, cc))
+                    proj_node.output.append(cc)
+                    proj_node.keys.append(cc)
+
             else:
                 proj_node.output.append("".join(col))
             # check if the column has alias
@@ -1953,8 +1952,10 @@ class LogicalPlanMaker:
         """
         # set the limit attribute
         if plan.name == Operator.LIMIT:
+            plan.limit = string.atoi(plan.expression)
             plan.children[0].limit = string.atoi(plan.expression)
-            plan = plan.children[0]
+            if plan.children[0].name in [Operator.ORDER_BY, Operator.AGGREGATE]:
+                plan = plan.children[0]
 
         # set the distinct attribute
         if plan.name == Operator.DISTINCT:
@@ -2102,7 +2103,7 @@ class LogicalPlanMaker:
         operator be true.
         """
         if self.task.table is not None:
-            partition_num = len(self.task.datanode)
+            partition_num = len(self.task.datanode)  
             if partition_num == 1:
                 # delete aggregation node
                 if plan.name == Operator.AGGREGATE and len(plan.children) > 0:
@@ -2154,8 +2155,9 @@ class LogicalPlanMaker:
                 """
                 p1 = InfoCenter().get_data_node_info(metadata_db, op.tables[0])
                 p2 = InfoCenter().get_data_node_info(metadata_db, op.tables[1])
+                chunk_num = InfoCenter().get_chunk_num(metadata_db)
                 if p1 == p2:
-                    if len(p1) == 1:
+                    if len(p1) == 1 and chunk_num == 1:
                         op.is_sql = 1
                     else:
                         for k in op.keys:
@@ -2218,7 +2220,7 @@ class LogicalPlanMaker:
     def make_SQL(self, plan):
         self.mark_SQL(plan)
         """
-        if the plan contains a AGGR op and its is_sql = 1, e.g.
+        if the plan contains a AGGR, LIMIT or ORDER op and its is_sql = 1, e.g.
         proj
           - limit is_sql=1
             -- aggr is_sql=1
@@ -2239,10 +2241,54 @@ class LogicalPlanMaker:
         flag = 0
         while list(queue) != []:
             op = queue.popleft()
-            if op.name == Operator.AGGREGATE:
+            if op.name == Operator.LIMIT:
+                if op.children[0].name == Operator.ORDER_BY:
+                    if op.children[0].children[0].name == Operator.AGGREGATE:
+                        if op.children[0].children[0].is_sql == 1:
+                            flag = 1
+                            op = op.children[0].children[0]
+                            spe_op = Operator.AGGREGATE
+                            break
+                    else:
+                        if op.children[0].is_sql == 1:
+                            flag = 1
+                            op = op.children[0]
+                            spe_op = Operator.ORDER_BY
+                            break
+                elif op.children[0].name == Operator.AGGREGATE:
+                    if op.children[0].is_sql == 1:
+                        flag = 1
+                        spe_op = Operator.AGGREGATE
+                        op = op.children[0]
+                        break
+
+                else:
+                    if op.is_sql == 1:
+                        flag = 1
+                        spe_op = Operator.LIMIT
+                        break
+            elif op.name == Operator.ORDER_BY:
+                if op.children[0].name == Operator.AGGREGATE:
+                    if op.children[0].is_sql == 1:
+                        flag = 1
+                        spe_op = Operator.AGGREGATE
+                        op = op.children[0]
+                        break
+                else:
+                    if op.is_sql == 1:
+                        flag = 1
+                        spe_op = Operator.ORDER_BY
+                        break
+            elif op.name == Operator.AGGREGATE:
                 if op.is_sql == 1:
                     flag = 1
+                    spe_op = Operator.AGGREGATE
                     break
+
+            # if op.name == Operator.AGGREGATE:
+            #     if op.is_sql == 1:
+            #         flag = 1
+            #         break
             if op.is_sql == 1:
                 if count < first_op_pos:
                     first_op_is_sql = op
@@ -2260,7 +2306,8 @@ class LogicalPlanMaker:
             queue.append(plan)
             while list(queue) != []:
                 op = queue.popleft()
-                if op.name == Operator.AGGREGATE:
+                #if op.name == Operator.AGGREGATE:
+                if op.name == spe_op:
                     break
                 op.is_sql = 0
                 for child in op.children:
@@ -2756,7 +2803,8 @@ class TaskManager:
     def new_schedule_operator(self, op):
         """Schedule different operators 
         """
-        if op.name in [Operator.AGGREGATE, Operator.ORDER_BY, Operator.DISTINCT]:
+        if op.name in [Operator.AGGREGATE, Operator.ORDER_BY, \
+                       Operator.DISTINCT, Operator.LIMIT]:
             self.schedule_blocking_op(op)
         elif op.name == Operator().UDX:
             self.schedule_udx_op(op)
@@ -3843,7 +3891,7 @@ class TaskManager:
         dic[conf.DB_ROW_SEP] = InfoCenter().get_separator(metadata_db)[0]
         dic[conf.DB_COL_SEP] = InfoCenter().get_separator(metadata_db)[1]
         dic[conf.CLIENT_SOCK] = task.reply_sock
-
+        
         # set limit
         if op.limit != 0:
             dic[conf.LIMIT] = op.limit

@@ -200,7 +200,7 @@ ASC = "ascending"
 DESC = "descending"
 
 # set task number for some operators (JOIN and GROUP)
-task_num_for_join = 10
-task_num_for_group_by = 10
+task_num_for_join = 2
+task_num_for_group_by = 2
 
 
