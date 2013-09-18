@@ -119,16 +119,6 @@ class SqlOp:
         self.total_time = 0
         self.job_list = [] # store jobs in order
 
-        ############
-        # for experiments
-        self.ex_w_time = 0
-        self.ex_s_time = 0
-        self.ex_f = None
-        self.notifier = None
-        self.process_queue = multiprocessing.Queue()
-        self.processes = []
-        self.threads = []
-        
     def parse_args(self, msg):
         b1 = base64.decodestring(msg)
         dic = cPickle.loads(b1)  
@@ -143,25 +133,6 @@ class SqlOp:
         sock.connect((self.master_name, self.master_port))
         sock.send("%10s%s" % (len(err), err))
         sock.close()
-
-    def collect_info(self):
-        i = 1
-        interval = 3
-        time.sleep(interval)
-        re_time = 0
-        while self.is_running:
-            cur_time = time.time()
-            base_load = re_time
-            if self.ex_s_time == 0:
-                re_time = self.ex_w_time 
-            else:
-                re_time = self.ex_w_time + cur_time - self.ex_s_time
-            self.ex_f.write("%s\t%s\n" % (i * interval, re_time - base_load))
-            self.ex_f.flush()
-            time.sleep(interval)
-            i += 1
-            
-        self.ex_f.close()
         
     def sql_proc(self):
         try:
@@ -251,15 +222,6 @@ class SqlOp:
         sep = conf.SEP_IN_MSG
         m = message.split(sep)
         try:
-            if m[0] == "LOAD_RECORD":
-                #################################################
-                # start a thread to notify the computation time
-                self.ex_f = open("/home/ting/hpdc/%s-load.dat" % gethostname(), "wb")
-                self.notifier = threading.Thread(target = self.collect_info)
-                self.notifier.setDaemon(True)
-                self.notifier.start()
-                #################################################
-
             if m[0] == conf.DATA_END:
                 ParaLiteLog.debug("MESSAGE: %s" % message)
                 # all data is dipatched to the parent nodes

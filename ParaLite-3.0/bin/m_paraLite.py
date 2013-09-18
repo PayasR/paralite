@@ -45,11 +45,12 @@ try:
     master_port = 0
     master_node = gethostname()
     
-    assert len(sys.argv) == 6
-    public_node = sys.argv[1]
-    public_port = string.atoi(sys.argv[2])
-    metadata_db = sys.argv[3]
-    master_port = string.atoi(sys.argv[4])
+    #assert len(sys.argv) == 6
+    if len(sys.argv) == 6:
+        public_node = sys.argv[1]
+        public_port = string.atoi(sys.argv[2])
+        metadata_db = sys.argv[3]
+        master_port = string.atoi(sys.argv[4])
 except Exception, e:
     es("ERROR: %s" % " ".join(str(s) for s in e.args))
 
@@ -5258,6 +5259,8 @@ class ParaLiteMaster():
         self.my_exception = None
         
     def init_user_config(self):
+        if len(sys.argv) <= 5:
+            return
         s = string.replace(sys.argv[5], '*', '\n')
         b1 = base64.decodestring(s)
         dic = cPickle.loads(b1)
@@ -7002,10 +7005,18 @@ class ParaLiteMaster():
             return None, None
 
     def do_analyze_cmd(self, database, query):
+        # set database name as a global vairable
+        global metadata_db
+        metadata_db = database
         t = Task()
         t.database = database
         t.query = query
-        LogicalPlanMaker(t).make()
+        err_type, err_info = LogicalPlanMaker(t).make()
+
+        if err_type != -1:
+            return err_info
+        else:
+            return t.plan.get()
         
     def do_query_cmd(self, database, cq):
         if cq.lower().startswith("select"):

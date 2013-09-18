@@ -3,6 +3,7 @@
 try:
         import sys, time
         from paraLite import ParaLite
+	import paraLiteParser
 
         if __name__ == "__main__":
 		argv = sys.argv
@@ -26,6 +27,13 @@ try:
 			if sql.endswith(";"):
 				sql = sql[0:len(sql)-1]
 			argv.append(sql)
+
+		elif len(argv) == 4 and argv[3].startswith("--parse-"):
+			# query for syntax tree or query plan
+			# Usage: paralite db "select * from T" --parse-syntax 
+			#        paralite db "select * from T" --parse-plan
+			paraLiteParser.main(argv)
+			sys.exit(0)
 
 		if argv[2].find(";") != -1:
 			# multiple queries in a file
