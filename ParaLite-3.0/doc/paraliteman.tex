@@ -333,6 +333,43 @@ nodes are distributed.
 
 To tune the performance, user can specify the block size by the option -b.
 
+@section Analyzing a query
+For a given SQL query, ParaLite first parses it grammatically using @t{pyparsing}
+(http://pyparsing.wikispaces.com/). You can see the syntax tree by issuing the
+following command:
+@example
+$ paralite test.db "select sum(a) from T group by a" @t{--parse-syntax}
+['SELECT', [['sum(a)']], 'FROM', [['T']], 'GROUP', 'BY', [['a']]]
+- fromList: [['T']]
+- group_by: [['a']]
+- select: [['sum(a)']]
+@end example
+Each clause has an alias name, e.g. ``group by a'' is named by ``group_by'' and
+[['a']] is its value. 
+
+Then based on the syntax tree, the query is converted into an execution plan which
+composes of operators such as join, group and sub-query. You can get the 
+execution plan of a query with the following command:
+@example
+$ paralite test.db "select sum(a) from T group by a" @t{--parse-plan}
+ (- group_by 0 expression=a input=['sum(a)'] output=['sum(a)'] group_key=['a'] 
+key=[] split_key=[] tables=['T'] func=['sum(a)'] is_sql=0)
+- (- sql 1 expression=select sum(a) from T group by a  input=[] output=['sum(a)'] 
+key=[] split_key=['a'] tables=['T'] is_sql=None)
+@end example
+
+@example
+$ ./paralite test.db "select T.a from T, X where T.a = X.b" @t{--parse-plan}
+ (- join 0 expression=['T.a = X.b '] input=['T.a', 'X.b'] output=['T.a'] 
+key=['T.a', 'X.b'] split_key=[] tables=['T', 'X'] is_sql=0 is_sub_plan=False)
+- (- sql 1 expression=select T.a from T  input=[] output=['T.a'] 
+key=[] split_key=['T.a'] tables=['T'] is_sql=None)
+- (- sql 2 expression=select X.b from X  input=[] output=['X.b'] 
+key=[] split_key=['X.b'] tables=['X'] is_sql=None)
+@end example
+
+
+
 @section Special command
 @example
 $ paralite test.db "special command"
@@ -386,10 +423,17 @@ Once a query is issued, you have a directory named @t{.paralite-log} in home
 directory. You can find all logging information there. When you firstly use
 a database, for instance, when you issue the next SQL:
 @example
-$ paralite test.db "create table x (a int, b) on hongo[[100-102]]"
+$ paralite test.db "create table x (a int, b) on hongo[[100-101]] chunk 2"
 @end example
 A @t{test.db} is firstly created to store all metadata info and 3 other files named
-@t{test.db-hostname-time-id} are created on hongo100, hongo101 and hongo102 respectively in the same directory with @t{test.db}.
+@t{test.db-hostname-partitionID-chunkID} are created on hongo100 and hongo101 respectively in the same directory with @t{test.db}.
+
+You can also specify the directories for logs and temporary files by the 
+option @t{-log} and @t{-temp} respectively:
+@example
+$ paralite test.db "create table x (a)" -log /log/dir -temp /temp/dir"
+@end example
+
 
 
 @chapter Using ParaLite in Real-World Workflows
