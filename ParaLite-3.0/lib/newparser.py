@@ -146,7 +146,7 @@ e4 = ((gfunc.setParseAction(lower_string) + lpar + ZeroOrMore(e1 | e3) +
 column_expr = ZeroOrMore(e4.setParseAction(get_string) | e3 | e1 ) + ZeroOrMore(op + ( e4.setParseAction(get_string)| e3 | e1 ))
 
 
-print (column_expr+StringEnd()).parseString("0.2*avg(ae)") 
+#print (column_expr+StringEnd()).parseString("0.2*avg(ae)") 
 
 notequal     = Literal("!=")
 notequal2    = Literal("<>")
