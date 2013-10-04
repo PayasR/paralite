@@ -300,15 +300,15 @@ $ paralite test.db "select * from document"
 32819 | It is sunny today. I have a good mood.
 82718 | I am studying in the lab. I want to go outside and play pingpong.
 @end example
-A executable @t{sentence_splitter} (@t{ss} for short) is used to split a 
+A Perl one-liner code below splits
 text into sentences and add an identification to each sentence. 
 @example
 $ cat a.dat
 Sentence1. Sentence2. Sentence3.
-$ cat a.dat | ss 
+$ cat a.dat | perl -e 'while ($l = <STDIN>) { chomp($l); @s = split(/\./, $l); for ($i = 0; $i < scalar(@s); ++$i) { print "$i==$s[$i]\n"; } }'
 1==Sentence1.
-2==Sentence2.
-3==Sentence3.
+2== Sentence2.
+3== Sentence3.
 $ paralite test.db "select document_id, F(text) from document with F=\"ss\" output_row_delimiter EMPTY_LINE"
 32819 | 1 == It is sunny today.
         2 == I have a good mood.
