@@ -265,6 +265,7 @@ class SqlOp:
                 ##########################
             elif m[0] == conf.JOB:
                 self.ex_s_time = time.time()
+                self.ex_w_time = 0
                 ParaLiteLog.debug("MESSAGE: %s" % message)
                 s_time = time.time()
                 jobid = m[1]
