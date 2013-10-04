@@ -303,22 +303,34 @@ $ paralite test.db "select * from document"
 A Perl one-liner code below splits
 text into sentences and add an identification to each sentence. 
 @example
+$ cat ss
+#!/usr/bin/perl
+while (my $l = <STDIN>) {
+  chomp($l);
+  my @s = split(/\./, $l);
+  for (my $i = 0; $i < scalar(@s); ++$i) {
+    print "$i==$s[$i]\n";
+  }
+}
+
 $ cat a.dat
 Sentence1. Sentence2. Sentence3.
-$ cat a.dat | perl -e 'while ($l = <STDIN>) { chomp($l); @s = split(/\./, $l); for ($i = 0; $i < scalar(@s); ++$i) { print "$i==$s[$i]\n"; } }'
+
+$ cat a.dat | perl ss
 1==Sentence1.
 2== Sentence2.
 3== Sentence3.
+
 $ paralite test.db "select document_id, F(text) from document with F=\"ss\" output_row_delimiter EMPTY_LINE"
-32819 | 1 == It is sunny today.
-        2 == I have a good mood.
-82718 | 1 == I am studying in the lab.
-        2 == I want to go outside and play pingpong.
-$ paralite test.db "select document_id, F(text) from document with F=\"ss\" output_col_delimiter '==' output_record_delimiter EMPTY_LINE"
+32819 | 1==It is sunny today.
+        2== I have a good mood.
+82718 | 1==I am studying in the lab.
+        2== I want to go outside and play pingpong.
+$ paralite test.db "select document_id, F(text) from document with F=\"perl ss\" output_col_delimiter '==' output_record_delimiter EMPTY_LINE"
 32819 | 1 | It is sunny today.
-32819 | 2 | I have a good mood.
+32819 | 2 |  I have a good mood.
 82718 | 1 | I am studying in the lab.
-82718 | 2 | I want to go outside and play pingpong.
+82718 | 2 |  I want to go outside and play pingpong.
 @end example
 
 An UDX can have more than one argument and output more than one column, e.g. F(a) as 
