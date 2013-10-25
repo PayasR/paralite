@@ -5,7 +5,8 @@
 \secentry{Processes coordination methods}{2}{1}{2}
 \secentry{Performing general SQL query}{2}{2}{2}
 \secentry{Performing collective query}{2}{3}{4}
-\secentry{Special command}{2}{4}{5}
-\secentry{Configurations for performance}{2}{5}{5}
-\secentry{Logs and databases}{2}{6}{6}
-\chapentry{Using ParaLite in Real-World Workflows}{3}{7}
+\secentry{Analyzing a query}{2}{4}{5}
+\secentry{Special command}{2}{5}{6}
+\secentry{Configurations for performance}{2}{6}{6}
+\secentry{Logs and databases}{2}{7}{7}
+\chapentry{Using ParaLite in Real-World Workflows}{3}{8}

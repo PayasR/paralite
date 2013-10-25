@@ -1,4 +1,4 @@
-This is TeX, Version 3.1415926 (TeX Live 2009/Debian) (format=tex 2012.2.16)  11 APR 2013 15:53
+This is TeX, Version 3.1415926 (TeX Live 2012/Debian) (format=tex 2013.6.17)  25 OCT 2013 12:15
 **paraliteman.tex
 (./paraliteman.tex (./texinfo.tex Loading texinfo [version 2003-02-03.16]:
 Basics,
@@ -106,8 +106,8 @@ toc,
 \savesfregister=\count46
 \footnoteno=\count47
 
-(/usr/share/texmf-texlive/tex/generic/epsf/epsf.tex
-This is `epsf.tex' v2.7.3 <23 July 2005>
+(/usr/share/texlive/texmf-dist/tex/generic/epsf/epsf.tex
+This is `epsf.tex' v2.7.4 <14 February 2011>
 \epsffilein=\read0
 \epsfframemargin=\dimen39
 \epsfframethickness=\dimen40
@@ -201,7 +201,7 @@ ngpong.[] |
 .etc.
 
 [4]
-Overfull \hbox (55.18257pt too wide) in paragraph at lines 312--312
+Overfull \hbox (55.18257pt too wide) in paragraph at lines 324--324
  []@texttt $ par-alite test.db "se-lect doc-u-ment_id, F(text) from doc-u-ment 
 with F=\"ss\" out-|
 
@@ -214,9 +214,9 @@ with F=\"ss\" out-|
 .etc.
 
 
-Overfull \hbox (55.18257pt too wide) in paragraph at lines 317--317
+Overfull \hbox (83.92601pt too wide) in paragraph at lines 329--329
  []@texttt $ par-alite test.db "se-lect doc-u-ment_id, F(text) from doc-u-ment 
-with F=\"ss\" out-|
+with F=\"perl ss\" out-|
 
 @hbox(7.60416+2.43333)x433.62
 .@glue(@leftskip) 28.90755
@@ -226,8 +226,47 @@ with F=\"ss\" out-|
 .@glue 5.74869
 .etc.
 
+[5]
+Overfull \hbox (43.6852pt too wide) in paragraph at lines 367--367
+ [] @texttt (- group_by 0 ex-pres-sion=a in-put=['sum(a)'] out-put=['sum(a)'] g
+roup_key=['a'][] |
 
-Overfull \hbox (20.69044pt too wide) in paragraph at lines 344--344
+@hbox(7.60416+2.43333)x433.62
+.@glue(@leftskip) 28.90755
+.@hbox(0.0+0.0)x0.0
+.@penalty 10000
+.@glue 5.74869
+.@texttt (
+.etc.
+
+
+Overfull \hbox (60.93126pt too wide) in paragraph at lines 369--369
+ []@texttt - (- sql 1 ex-pres-sion=select sum(a) from T group by a  in-put=[] o
+utput=['sum(a)'][] |
+
+@hbox(7.60416+2.43333)x433.62
+.@glue(@leftskip) 28.90755
+.@hbox(0.0+0.0)x0.0
+.@texttt -
+.@discretionary
+.@penalty 10000
+.etc.
+
+
+Overfull \hbox (37.93651pt too wide) in paragraph at lines 376--376
+ []@texttt key=['T.a', 'X.b'] split_key=[] ta-bles=['T', 'X'] is_sql=0 is_sub_p
+lan=False)[] |
+
+@hbox(7.60416+2.43333)x433.62
+.@glue(@leftskip) 28.90755
+.@hbox(0.0+0.0)x0.0
+.@texttt k
+.@texttt e
+.@texttt y
+.etc.
+
+
+Overfull \hbox (20.69044pt too wide) in paragraph at lines 393--393
  []                 @texttt [-row_separator row_sep][] Im-port data from FILE i
 nto TABLE[] |
 
@@ -240,7 +279,7 @@ nto TABLE[] |
 .etc.
 
 
-Overfull \hbox (32.18782pt too wide) in paragraph at lines 349--349
+Overfull \hbox (32.18782pt too wide) in paragraph at lines 398--398
  []@texttt .row_separator STRING[]   Change row sep-a-ra-tor used by out-put mo
 de and .import[] |
 
@@ -253,7 +292,7 @@ de and .import[] |
 .etc.
 
 
-Overfull \hbox (32.18782pt too wide) in paragraph at lines 350--350
+Overfull \hbox (32.18782pt too wide) in paragraph at lines 399--399
  []@texttt .col_separator STRING[]   Change col sep-a-ra-tor used by out-put mo
 de and .import[] |
 
@@ -265,8 +304,8 @@ de and .import[] |
 .@texttt o
 .etc.
 
-[5]
-Overfull \hbox (78.17732pt too wide) in paragraph at lines 374--374
+[6]
+Overfull \hbox (78.17732pt too wide) in paragraph at lines 423--423
  []@texttt $ par-alite test.db ".an-a-lyze 'se-lect F(a) from x, y where x.a = 
 y.b' with F=\"cmd\""[] |
 
@@ -278,14 +317,27 @@ y.b' with F=\"cmd\""[] |
 .@glue 5.74869
 .etc.
 
-Chapter 3 [6] [7] ) 
+
+Overfull \hbox (20.69044pt too wide) in paragraph at lines 438--438
+ []@texttt $ par-alite test.db "cre-ate ta-ble x (a int, b) on hongo[[100-101]]
+ chunk 2"[] |
+
+@hbox(7.60416+2.43333)x433.62
+.@glue(@leftskip) 28.90755
+.@hbox(0.0+0.0)x0.0
+.@texttt $
+.@penalty 10000
+.@glue 5.74869
+.etc.
+
+Chapter 3 [7] [8] ) 
 Here is how much of TeX's memory you used:
- 1324 strings out of 497975
- 14326 string characters out of 1220850
- 34484 words of memory out of 3000000
- 2207 multiletter control sequences out of 15000+50000
+ 1324 strings out of 497973
+ 14341 string characters out of 3220739
+ 34486 words of memory out of 3000000
+ 2207 multiletter control sequences out of 15000+200000
  31953 words of font info for 111 fonts, out of 3000000 for 9000
  19 hyphenation exceptions out of 8191
  12i,5n,10p,238b,284s stack positions out of 5000i,500n,10000p,200000b,50000s
 
-Output written on paraliteman.dvi (10 pages, 19872 bytes).
+Output written on paraliteman.dvi (11 pages, 20920 bytes).
