@@ -269,7 +269,7 @@ indexed_column = column_name + Optional(COLLATE + collate_name) + Optional (ASC 
             
 table_constraint = Optional(CONSTRAINT + name) + ((PRIMARY + KEY | UNIQUE) + LPAR + Group(delimitedList ( indexed_column))+ RPAR + conflict_clause | CHECK + LPAR + expr + RPAR | FOREIGN + KEY + LPAR + Group(delimitedList(column_name))+ RPAR + foreign_key_clause)
 
-create_stmt = (CREATE + Optional(TEMP|TEMPORARY|VIRTUAL)("table_type") + TABLE + Optional(IF+NOT+EXISTS)  + Optional(database_name + ".") + table_name("table") + Optional(USING + (FTS3|FTS4|FTS4AUX))("fts") + ((LPAR + Group(delimitedList(column_def))("column") + ZeroOrMore(COMMA+table_constraint)+ RPAR)| (AS+Group(select_stmt)("select"))) + Optional(ON + (Group(OneOrMore(node))("node") | (FILE + node ("file")))) + Optional(PARTITION + BY + delimitedList(hash_key)("hash_key"))+ Optional(CHUNK + numeric_literal("chunk_num")) + Optional(REPLICA + numeric_literal("replica_num")))
+create_stmt = (CREATE + Optional(TEMP|TEMPORARY|VIRTUAL)("table_type") + TABLE + Optional(IF+NOT+EXISTS)  + Optional(database_name + ".") + table_name("table") + Optional(USING + (FTS3|FTS4|FTS4AUX))("fts") + ((LPAR + Group(delimitedList(column_def))("column") + ZeroOrMore(COMMA+table_constraint)+ RPAR)| (AS+Group(select_stmt)("select"))) + Optional(ON + (Group(OneOrMore(node))("node") | (FILE + file_name ("file")))) + Optional(PARTITION + BY + delimitedList(hash_key)("hash_key"))+ Optional(CHUNK + numeric_literal("chunk_num")) + Optional(REPLICA + numeric_literal("replica_num")))
 
 # create index statement
 ######################################################################
