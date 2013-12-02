@@ -681,6 +681,12 @@ class UDXOp:
         if len(output_dic) == 1:
             # the output is from the udx, return the output directly
             #out.write(output_dic[0])
+            #Issue21: output_col_delimiter 
+            if self.udxes[0].output_col_delimiter != conf.NULL:
+                output_dic[0] = output_dic[0].replace(self.udxes[0].output_col_delimiter,self.db_col_sep)
+            if self.udxes[0].output_record_delimiter != conf.NULL:
+                output_dic[0] = output_dic[0].replace(self.udxes[0].output_record_delimiter,self.db_row_sep)
+            #End            
             return output_dic[0]
         """
         find the pos of non-key attribute 
@@ -725,6 +731,10 @@ class UDXOp:
                             else:
                                 record += re[pos_k]
                             pos_k += 1
+                    #Issue21: Convert output_col_delimiter back to db_col_delimiter
+                    if col_sep != self.db_col_sep:
+                        record = record.replace(col_sep,self.db_col_sep)
+                    #End
                     out.write(record)
                     out.write(row_sep)
                 pos_u += 1
@@ -749,6 +759,10 @@ class UDXOp:
                             record += re + col_sep
                         else:
                             record += re
+                #Issue21: output_col_delimtier 
+                if col_sep != self.db_col_sep:
+                    record = record.replace(col_sep,self.db_col_sep)
+                #End
                 out.write(record)
                 out.write(row_sep)
                 pos_u += 1
